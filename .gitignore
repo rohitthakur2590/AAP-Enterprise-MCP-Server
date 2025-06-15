@@ -156,3 +156,4 @@ secrets.env
 
 # Claude Code specific
 .claude/
+CLAUDE.md
