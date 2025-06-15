@@ -165,6 +165,12 @@ For production environments, ensure proper SSL certificates are configured on yo
 | `create_job_template` | Create a new job template |
 | `create_project` | Create a new project |
 | `run_adhoc_command` | Execute ad-hoc ansible commands |
+| `list_projects` | List all projects |
+| `get_project` | Get project details by ID |
+| `list_project_updates` | List project update jobs (SCM sync) |
+| `get_project_update` | Get project update job status |
+| `get_project_update_logs` | Get project update job logs |
+| `update_project` | Trigger project update (SCM sync) |
 
 ### Ansible Galaxy Search Tools
 

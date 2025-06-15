@@ -437,6 +437,43 @@ async def get_adhoc_command_output(adhoc_id: int) -> Any:
     return await make_request(f"{AAP_URL}/ad_hoc_commands/{adhoc_id}/stdout/?format=txt")
 
 
+# Project Management Tools
+@mcp.tool()
+async def list_projects() -> Any:
+    """List all projects in Ansible Automation Platform."""
+    return await make_request(f"{AAP_URL}/projects/")
+
+
+@mcp.tool()
+async def get_project(project_id: int) -> Any:
+    """Get details of a specific project by ID."""
+    return await make_request(f"{AAP_URL}/projects/{project_id}/")
+
+
+@mcp.tool()
+async def list_project_updates() -> Any:
+    """List all project update jobs (SCM sync operations)."""
+    return await make_request(f"{AAP_URL}/project_updates/")
+
+
+@mcp.tool()
+async def get_project_update(update_id: int) -> Any:
+    """Get status and details of a specific project update job."""
+    return await make_request(f"{AAP_URL}/project_updates/{update_id}/")
+
+
+@mcp.tool()
+async def get_project_update_logs(update_id: int) -> str:
+    """Get logs from a project update job (SCM sync operation)."""
+    return await make_request(f"{AAP_URL}/project_updates/{update_id}/stdout/?format=txt")
+
+
+@mcp.tool()
+async def update_project(project_id: int) -> Any:
+    """Trigger a project update (SCM sync) for a specific project."""
+    return await make_request(f"{AAP_URL}/projects/{project_id}/update/", method="POST")
+
+
 # Galaxy API Helper Functions
 async def search_galaxy_api(endpoint: str, params: dict = None) -> Any:
     """Helper function to make requests to Ansible Galaxy API."""
