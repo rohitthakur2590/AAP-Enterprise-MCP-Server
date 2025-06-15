@@ -18,6 +18,21 @@ A Model Context Protocol (MCP) server for Ansible Automation Platform (AAP) and 
 - **Decision Environment Management**: Manage decision environments
 - **Event Stream Monitoring**: Monitor event streams
 
+### Ansible Galaxy Integration
+- **Collection Search**: Search and discover Ansible collections by name, namespace, or keywords
+- **Role Search**: Find community roles by keyword, author, or specific criteria
+- **Content Details**: Get comprehensive information about collections and roles including versions, dependencies, and installation instructions
+- **Smart Suggestions**: AI-powered content recommendations based on use case descriptions
+- **AAP Integration**: Intelligent suggestions that consider existing AAP infrastructure and inventories
+
+### Ansible Lint Integration
+- **Playbook Validation**: Real-time linting of Ansible playbook content with configurable quality profiles
+- **File Analysis**: Comprehensive analysis of Ansible files, roles, and entire project structures
+- **Best Practice Enforcement**: Automated checking against Ansible community standards and best practices
+- **Syntax Validation**: Quick syntax checking for immediate feedback during development
+- **Multi-Profile Support**: Progressive quality improvement with profiles from basic to production-ready
+- **Rule Management**: List, filter, and understand ansible-lint rules with detailed explanations
+
 ## Installation
 
 ### Prerequisites
@@ -109,6 +124,15 @@ Add the following to your MCP client configuration (e.g., Claude Desktop, Cursor
         "EDA_TOKEN": "your-eda-api-token",
         "EDA_URL": "https://your-aap-server.com/api/eda/v1"
       }
+    },
+    "ansible-lint": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/path/to/AAP-Enterprise-MCP-Server",
+        "run",
+        "ansible-lint.py"
+      ]
     }
   }
 }
@@ -141,6 +165,30 @@ For production environments, ensure proper SSL certificates are configured on yo
 | `create_job_template` | Create a new job template |
 | `create_project` | Create a new project |
 | `run_adhoc_command` | Execute ad-hoc ansible commands |
+
+### Ansible Galaxy Search Tools
+
+| Tool | Description |
+|------|-------------|
+| `search_galaxy_collections` | Search Ansible Galaxy collections by query, tags, or namespace |
+| `search_galaxy_roles` | Search Ansible Galaxy roles by keyword, name, or author |
+| `get_collection_details` | Get detailed information about a specific collection |
+| `get_role_details` | Get detailed information about a specific role |
+| `suggest_ansible_content` | Intelligently suggest collections and roles based on use case description |
+
+### Ansible Lint Tools
+
+| Tool | Description |
+|------|-------------|
+| `lint_playbook` | Lint Ansible playbook content with configurable profiles and rules |
+| `lint_file` | Lint specific Ansible files on disk |
+| `lint_role` | Comprehensive validation of Ansible role directories |
+| `validate_syntax` | Quick syntax-only validation for immediate feedback |
+| `check_best_practices` | Context-aware best practice checking (dev/staging/production) |
+| `analyze_project` | Analyze entire Ansible project structure with comprehensive reporting |
+| `list_rules` | List available ansible-lint rules, optionally filtered by tags |
+| `list_tags` | List all available tags for ansible-lint rules |
+| `get_ansible_lint_version` | Get version information for installed ansible-lint |
 
 ### Event-Driven Ansible Tools
 
@@ -191,6 +239,72 @@ await run_adhoc_command(
     module_name="setup",
     limit="web-server-01.example.com"
 )
+```
+
+### Galaxy Content Discovery
+```python
+# Get intelligent suggestions for a specific use case
+suggestions = await suggest_ansible_content(
+    use_case="I am developing a playbook that spins up and down EC2 servers on AWS using ansible",
+    check_aap_inventory=True
+)
+
+# Search for AWS-related collections
+collections = await search_galaxy_collections(query="aws", limit=10)
+
+# Search for EC2-specific roles
+roles = await search_galaxy_roles(keyword="ec2", limit=5)
+
+# Get detailed information about a specific collection
+details = await get_collection_details(namespace="amazon", name="aws")
+
+# Get detailed information about a specific role
+role_info = await get_role_details(role_id=12345)
+```
+
+### Ansible Lint Quality Assurance
+```python
+# Lint playbook content with different quality profiles
+playbook_content = """
+---
+- hosts: all
+  tasks:
+    - name: install package
+      yum: name=nginx state=present
+"""
+
+# Basic linting for development
+basic_results = await lint_playbook(
+    content=playbook_content,
+    profile="basic",
+    format_type="json"
+)
+
+# Production-ready validation
+production_results = await lint_playbook(
+    content=playbook_content,
+    profile="production",
+    format_type="json"
+)
+
+# Quick syntax validation
+syntax_check = await validate_syntax(content=playbook_content)
+
+# Context-aware best practices checking
+best_practices = await check_best_practices(
+    content=playbook_content,
+    context="production"
+)
+
+# Analyze entire project structure
+project_analysis = await analyze_project(
+    project_path="/path/to/ansible/project",
+    profile="moderate"
+)
+
+# List available rules and tags
+rules = await list_rules(tags="idempotency,syntax")
+tags = await list_tags()
 ```
 
 ### EDA Activation Management
