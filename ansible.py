@@ -60,7 +60,7 @@ async def job_status(job_id: int) -> Any:
 @mcp.tool()
 async def job_logs(job_id: int) -> str:
     """Retrieve logs for a job."""
-    return await make_request(f"{AAP_URL}/jobs/{job_id}/stdout/")
+    return await make_request(f"{AAP_URL}/jobs/{job_id}/stdout/?format=txt")
 
 
 @mcp.tool()
@@ -434,7 +434,7 @@ async def get_adhoc_command_status(adhoc_id: int) -> Any:
 @mcp.tool()
 async def get_adhoc_command_output(adhoc_id: int) -> Any:
     """Get output/logs from an ad-hoc command."""
-    return await make_request(f"{AAP_URL}/ad_hoc_commands/{adhoc_id}/stdout/")
+    return await make_request(f"{AAP_URL}/ad_hoc_commands/{adhoc_id}/stdout/?format=txt")
 
 
 # Galaxy API Helper Functions
