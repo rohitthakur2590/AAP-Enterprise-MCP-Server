@@ -480,13 +480,21 @@ async def search_galaxy_api(endpoint: str, params: dict = None) -> Any:
     base_url = "https://galaxy.ansible.com"
     url = f"{base_url}{endpoint}"
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url, params=params)
+    timeout = httpx.Timeout(60.0)
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.get(url, params=params)
 
-    if response.status_code != 200:
-        return f"Galaxy API Error {response.status_code}: {response.text}"
+        if response.status_code != 200:
+            return f"Galaxy API Error {response.status_code}: {response.text}"
 
-    return response.json()
+        return response.json()
+    except httpx.TimeoutException:
+        return "Galaxy API timeout - service may be slow"
+    except httpx.RequestError as e:
+        return f"Galaxy API request error: {str(e)}"
+    except Exception as e:
+        return f"Galaxy API unexpected error: {str(e)}"
 
 
 def analyze_use_case(description: str) -> dict:
@@ -581,9 +589,10 @@ def rank_content_relevance(content_list: list, keywords: list, content_type: str
 @mcp.tool()
 async def search_galaxy_collections(query: str, tags: str = None, namespace: str = None, limit: int = 20) -> Any:
     """Search Ansible Galaxy collections by query terms, tags, or namespace."""
-    params = {"limit": limit}
+    # Since Galaxy v3 API doesn't support direct search, we need to fetch more data to find matches
+    max_fetch = min(500, limit * 20)  # Fetch significantly more to increase chance of finding matches
+    params = {"limit": max_fetch}
 
-    # Note: Galaxy v3 API doesn't support direct keyword search, so we'll get collections and filter
     collections_data = await search_galaxy_api("/api/v3/plugin/ansible/content/published/collections/index/", params)
 
     if isinstance(collections_data, str):  # Error occurred
@@ -599,12 +608,15 @@ async def search_galaxy_collections(query: str, tags: str = None, namespace: str
         collection_text = f"{collection.get('namespace', '')} {collection.get('name', '')}".lower()
 
         # Check if query matches namespace or name
-        if query_lower in collection_text:
-            filtered_collections.append(collection)
-
+        matches_query = query_lower in collection_text
+        
         # Additional filtering by namespace if specified
-        if namespace and collection.get("namespace", "").lower() != namespace.lower():
-            continue
+        matches_namespace = True
+        if namespace:
+            matches_namespace = collection.get("namespace", "").lower() == namespace.lower()
+        
+        if matches_query and matches_namespace:
+            filtered_collections.append(collection)
 
         if len(filtered_collections) >= limit:
             break
@@ -632,14 +644,12 @@ async def search_galaxy_collections(query: str, tags: str = None, namespace: str
 @mcp.tool()
 async def search_galaxy_roles(keyword: str = None, name: str = None, author: str = None, limit: int = 20) -> Any:
     """Search Ansible Galaxy roles by keyword, name, or author."""
-    params = {"page_size": limit}
+    # Since Galaxy roles API has limited server-side filtering, we fetch more results for client-side filtering
+    fetch_size = min(500, limit * 20) if keyword or name else limit
+    params = {"page_size": fetch_size}
 
-    if keyword:
-        params["keyword"] = keyword
-    if name:
-        params["name"] = name
     if author:
-        params["author"] = author
+        params["github_user"] = author  # Use 'github_user' for author filtering
 
     roles_data = await search_galaxy_api("/api/v1/roles/", params)
 
@@ -648,9 +658,32 @@ async def search_galaxy_roles(keyword: str = None, name: str = None, author: str
 
     roles = roles_data.get("results", [])
 
+    # Client-side filtering for keyword and name
+    filtered_roles = []
+    for role in roles:
+        matches = True
+        
+        # Filter by keyword
+        if keyword:
+            keyword_lower = keyword.lower()
+            searchable_text = f"{role.get('name', '')} {role.get('description', '')} {' '.join(role.get('summary_fields', {}).get('tags', []))}".lower()
+            matches = matches and keyword_lower in searchable_text
+        
+        # Filter by name
+        if name:
+            name_lower = name.lower()
+            role_name_lower = role.get('name', '').lower()
+            matches = matches and name_lower in role_name_lower
+        
+        if matches:
+            filtered_roles.append(role)
+            
+        if len(filtered_roles) >= limit:
+            break
+
     # Format response
     results = []
-    for role in roles:
+    for role in filtered_roles[:limit]:
         github_user = role.get("github_user", "")
         role_name = role.get("name", "")
 
