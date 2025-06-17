@@ -1,7 +1,7 @@
 [project]
 name = "aap-enterprise-mcp-server"
 version = "0.1.0"
-description = "MCP Server for Ansible Automation Platform (AAP) and Event-Driven Ansible (EDA)"
+description = "MCP Server for Ansible Automation Platform (AAP), Event-Driven Ansible (EDA), and Red Hat Documentation"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
@@ -12,7 +12,10 @@ keywords = [
     "automation",
     "mcp",
     "event-driven",
-    "infrastructure"
+    "infrastructure",
+    "redhat",
+    "documentation",
+    "openshift"
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -55,7 +58,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["ansible.py", "eda.py", "ansible-lint.py"]
+packages = ["ansible.py", "eda.py", "ansible-lint.py", "redhat_docs.py"]
 
 [tool.black]
 line-length = 120
@@ -85,3 +88,8 @@ disallow_untyped_defs = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.11.13",
+]
