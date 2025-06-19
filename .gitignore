@@ -158,8 +158,8 @@ secrets.env
 .claude/
 CLAUDE.md
 
-# Documentation files (internal development notes)
-DOMAIN_VALIDATION_COMPLETE.md
-HYBRID_WEB_SEARCH_INTEGRATION.md
-REDHAT_DOCS_FIXES.md
-redhat_docs_analysis.md
+# Feature development folder
+feature-dev/
+
+# Backup files
+redhat_docs_backup.py

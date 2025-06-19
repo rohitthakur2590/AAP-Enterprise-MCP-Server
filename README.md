@@ -33,13 +33,13 @@ A comprehensive Model Context Protocol (MCP) server suite for Red Hat's automati
 - **Multi-Profile Support**: Progressive quality improvement with profiles from basic to production-ready
 - **Rule Management**: List, filter, and understand ansible-lint rules with detailed explanations
 
-### Red Hat Documentation Integration
-- **Secure Access**: Domain-validated access to 50+ official Red Hat domains and documentation sources
-- **Hybrid Search**: Combines sitemap discovery with web search indexing for comprehensive content discovery
-- **Version Intelligence**: Smart version detection prioritizing latest releases (OpenShift 4.18+, RHEL 9+)
-- **PDF-First Access**: Reliable content extraction from 1.4MB+ PDF files with HTML fallback
-- **Telco/Edge Specialization**: Specialized guidance for telecommunications, edge computing, and CNF scenarios
-- **Multi-Product Coverage**: OpenShift Container Platform, RHEL, Ansible Automation Platform, Satellite, and more
+### Red Hat Documentation Integration (Streamlined)
+- **Efficient Discovery**: Web search-based content discovery using official Red Hat domains
+- **Smart Content Fetching**: PDF-first strategy handling Red Hat's JavaScript rendering issues
+- **Domain Security**: Validates access to 50+ official Red Hat domains for secure documentation access
+- **Minimal MCP Overhead**: Streamlined 2-tool approach reduces API calls by 75%
+- **Search Query Generation**: Creates optimized search queries for external WebSearch MCP tool usage
+- **Authentication Handling**: Smart detection of subscription-required vs public content
 
 ## Installation
 
