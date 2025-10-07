@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="bg-white p-4 rounded-2xl shadow">
+  <h2 class="font-semibold mb-3">Execution Plan (simulated)</h2>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <section>
+      <h3 class="font-medium">Proposed actions</h3>
+      {% for host, steps in actions.items() %}
+        <div class="mt-2">
+          <div class="font-semibold">{{ host }}</div>
+          <ul class="list-disc ml-4 text-sm">
+          {% for s in steps %}<li>{{ s }}</li>{% endfor %}
+          </ul>
+        </div>
+      {% endfor %}
+    </section>
+    <section>
+      <h3 class="font-medium">Results</h3>
+      {% for host, res in results.items() %}
+        <div class="mt-2">
+          <div class="font-semibold">{{ host }}</div>
+          <div class="text-sm text-slate-700">{{ res }}</div>
+        </div>
+      {% endfor %}
+    </section>
+  </div>
+  <div class="mt-4">
+    <a href="/" class="text-blue-600 underline text-sm">← Back</a>
+  </div>
+</div>
+{% endblock %}

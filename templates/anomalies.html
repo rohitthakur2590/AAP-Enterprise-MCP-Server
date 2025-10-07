@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="bg-white p-4 rounded-2xl shadow">
+  <h2 class="font-semibold mb-3">Anomalies (fresh scan)</h2>
+  {% if anomalies and anomalies|length > 0 %}
+    {% include "anomalies_table.html" %}
+  {% else %}
+    <p class="text-slate-600">No anomalies detected.</p>
+  {% endif %}
+  <div class="mt-4">
+    <a href="/" class="text-blue-600 underline text-sm">← Back</a>
+  </div>
+</div>
+{% endblock %}

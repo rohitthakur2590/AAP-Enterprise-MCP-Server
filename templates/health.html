@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="bg-white p-5 rounded-2xl shadow max-w-3xl">
+  <h2 class="font-semibold text-slate-800 mb-2">Health details — {{ host }}</h2>
+  <table class="min-w-full text-sm">
+    <tbody class="divide-y divide-slate-100">
+      {% macro row(k, v) -%}
+        <tr>
+          <td class="py-2 pr-4 text-slate-500">{{ k }}</td>
+          <td class="py-2">{{ v if v is not none else "—" }}</td>
+        </tr>
+      {%- endmacro %}
+
+      {{ row("Rollup", health.hc_result|default("—")) }}
+      {{ row("Fail count", (health.hc_fail_count|int) if health.hc_fail_count is defined else "—") }}
+
+      {{ row("CPU 1 min avg", health.hc_cpu_1min) }}
+      {{ row("CPU 5 min avg", health.hc_cpu_5min) }}
+      {{ row("CPU threshold", health.hc_cpu_threshold) }}
+
+      {{ row("Mem utilization %", health.hc_mem_util) }}
+      {{ row("Mem util threshold %", health.hc_mem_threshold) }}
+      {{ row("Mem free (units)", health.hc_mem_free) }}
+      {{ row("Mem free MB", health.hc_mem_free_mb) }}
+      {{ row("Buffers", health.hc_mem_buffers) }}
+      {{ row("Buffers MB", health.hc_mem_buffers_mb) }}
+      {{ row("Cache", health.hc_mem_cache) }}
+      {{ row("Cache MB", health.hc_mem_cache_mb) }}
+
+      {{ row("Uptime (min)", health.hc_uptime_min) }}
+      {{ row("Uptime min threshold", health.hc_uptime_min_threshold) }}
+
+      {{ row("Env temperature", health.hc_env_temp) }}
+      {{ row("Env temp threshold", health.hc_env_temp_threshold) }}
+      {{ row("Env temp over", health.hc_env_over) }}
+      {{ row("Fans status", health.hc_fans_status) }}
+      {{ row("Power OK (1/0)", health.hc_power_ok) }}
+    </tbody>
+  </table>
+
+  <div class="mt-4">
+    <a href="/" class="text-blue-600 underline">← Back</a>
+  </div>
+</div>
+{% endblock %}

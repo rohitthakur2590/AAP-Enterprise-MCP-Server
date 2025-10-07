@@ -1,0 +1,130 @@
+<section class="xl:col-span-3 bg-white p-5 rounded-2xl shadow">
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="font-semibold text-slate-800">Healthchecks</h2>
+  </div>
+
+  {# Build list of hosts that actually have any HC-ish data #}
+  {% set ns = namespace(items=[]) %}
+  {% for r in rows %}
+    {% set has_any =
+        (r.get('cpu_1m') is not none) or (r.get('cpu_5m') is not none) or (r.get('hc_cpu_1min') is not none) or
+        (r.get('mem_threshold') is not none) or (r.get('hc_mem_util') is not none) or
+        (r.get('env_temp') is not none) or (r.get('env_temp_threshold') is not none) or
+        (r.get('hc_env_temp') is not none) or (r.get('hc_env_temp_threshold') is not none) or
+        (r.get('uptime_minutes') is not none) or (r.get('uptime_min_required') is not none) or
+        (r.get('hc_uptime_min') is not none) or (r.get('hc_uptime_min_threshold') is not none) or
+        (r.get('hc_result') is not none)
+    %}
+    {% if has_any %}
+      {% set _ = ns.items.append(r) %}
+    {% endif %}
+  {% endfor %}
+
+  {% if ns.items | length > 0 %}
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      {% for r in ns.items %}
+        <div class="rounded-xl ring-1 ring-slate-200 p-4 bg-white">
+          <div class="flex items-center justify-between mb-2">
+            <a href="/report?host={{ r.get('host') }}"
+               class="font-medium text-blue-600 hover:text-blue-700 underline-offset-2 hover:underline">
+              {{ r.get('host') }}
+            </a>
+
+            {# Normalize all fields (supports both cpu_1m/* and hc_* names) #}
+            {% set cpu1 = r.get('cpu_1m') if r.get('cpu_1m') is not none else (r.get('cpu_5m') if r.get('cpu_5m') is not none else r.get('hc_cpu_1min')) %}
+            {% set cthr = r.get('cpu_threshold') if r.get('cpu_threshold') is not none else r.get('hc_cpu_threshold') %}
+
+            {% set memu = r.get('mem_used_pct') if r.get('mem_used_pct') is not none else r.get('hc_mem_util') %}
+            {% set mthr = r.get('mem_threshold') if r.get('mem_threshold') is not none else r.get('hc_mem_threshold') %}
+
+            {% set tnow = r.get('env_temp') if r.get('env_temp') is not none else r.get('hc_env_temp') %}
+            {% set tthr = r.get('env_temp_threshold') if r.get('env_temp_threshold') is not none else r.get('hc_env_temp_threshold') %}
+
+            {% set upm  = r.get('uptime_minutes') if r.get('uptime_minutes') is not none else r.get('hc_uptime_min') %}
+            {% set uthr = r.get('uptime_min_required') if r.get('uptime_min_required') is not none else r.get('hc_uptime_min_threshold') %}
+
+            {% set hc_result = r.get('hc_result') %}
+
+            {# Overall status: prefer explicit result if present; else infer #}
+            {% set inferred_fail = (
+              (cpu1 is not none and cthr is not none and cpu1 >= cthr) or
+              (memu is not none and mthr is not none and memu >= mthr) or
+              (tnow is not none and tthr is not none and tnow > tthr) or
+              (upm  is not none and uthr is not none and upm  < uthr)
+            ) %}
+            {% set overall_ok =
+              (hc_result is not none and (hc_result|string).upper() == 'PASS')
+              or (hc_result is none and not inferred_fail)
+            %}
+
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                         {{ 'bg-emerald-100 text-emerald-700' if overall_ok else 'bg-rose-100 text-rose-700' }}">
+              {{ 'PASS' if overall_ok else 'FAIL' }}
+            </span>
+          </div>
+
+          <div class="space-y-3">
+            {# CPU #}
+            {% if cpu1 is not none and cthr is not none %}
+              <div>
+                <div class="flex items-center justify-between text-xs text-slate-600">
+                  <span>CPU</span>
+                  <span>{{ cpu1|round(0) }}% / {{ cthr|round(0) }}%</span>
+                </div>
+                <div class="h-2 rounded bg-slate-200">
+                  <div class="h-2 rounded {{ 'bg-emerald-500' if cpu1 < cthr else 'bg-rose-500' }}"
+                       style="width: {{ [cpu1, 100]|min }}%"></div>
+                </div>
+              </div>
+            {% endif %}
+
+            {# Memory util #}
+            {% if memu is not none and mthr is not none %}
+              <div>
+                <div class="flex items-center justify-between text-xs text-slate-600">
+                  <span>Memory</span>
+                  <span>{{ memu|round(0) }}% / {{ mthr|round(0) }}%</span>
+                </div>
+                <div class="h-2 rounded bg-slate-200">
+                  <div class="h-2 rounded {{ 'bg-emerald-500' if memu < mthr else 'bg-rose-500' }}"
+                       style="width: {{ [memu, 100]|min }}%"></div>
+                </div>
+              </div>
+            {% endif %}
+
+            {# Environment temperature #}
+            {% if tnow is not none and tthr is not none %}
+              <div>
+                <div class="flex items-center justify-between text-xs text-slate-600">
+                  <span>Temp</span>
+                  <span>{{ tnow }}°C / {{ tthr }}°C</span>
+                </div>
+                <div class="h-2 rounded bg-slate-200">
+                  {% set temp_pct = (tnow / (tthr if tthr != 0 else 1)) * 100 %}
+                  <div class="h-2 rounded {{ 'bg-emerald-500' if tnow <= tthr else 'bg-rose-500' }}"
+                       style="width: {{ [temp_pct, 100]|min|round(0,'floor') }}%"></div>
+                </div>
+              </div>
+            {% endif %}
+
+            {# Uptime (minutes => d/h) #}
+            {% if upm is not none and uthr is not none %}
+              {% set d = (upm // 1440)|int %}
+              {% set h = ((upm % 1440) // 60)|int %}
+              {% set dmin = (uthr // 1440)|int %}
+              {% set hmin = ((uthr % 1440) // 60)|int %}
+              <div class="flex items-center justify-between text-xs text-slate-600">
+                <span>Uptime</span>
+                <span class="{{ 'text-emerald-700' if upm >= uthr else 'text-rose-700' }}">
+                  {{ d }}d {{ h }}h / ≥ {{ dmin }}d {{ hmin }}h
+                </span>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="text-slate-600 text-sm">No healthcheck data detected in the uploaded files.</p>
+  {% endif %}
+</section>

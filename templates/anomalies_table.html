@@ -1,0 +1,80 @@
+<table class="w-full min-w-[900px] table-fixed text-sm">
+  <colgroup>
+    <col class="w-32">   {# host #}
+    <col class="w-24">   {# mem_used% #}
+    <col class="w-20">   {# license #}
+    <col class="w-20">   {# iface_total #}
+    <col class="w-20">   {# enabled #}
+    <col class="w-20">   {# ratio #}
+    <col>                {# suggested (flex) #}
+  </colgroup>
+
+  <thead class="text-left text-slate-500">
+    <tr>
+      <th class="py-2 whitespace-nowrap">Host</th>
+      <th class="whitespace-nowrap">mem_used%</th>
+      <th class="whitespace-nowrap">License</th>
+      <th class="whitespace-nowrap">iface_total</th>
+      <th class="whitespace-nowrap">enabled</th>
+      <th class="whitespace-nowrap">ratio</th>
+      <th class="whitespace-nowrap">suggested</th>
+    </tr>
+  </thead>
+
+  <tbody>
+  {% for item in anomalies %}
+    {# Support both shapes:
+       - item is a row (mapping)
+       - item is (row, score) pair
+    #}
+    {% if item is mapping %}
+      {% set r = item %}
+      {% set score = none %}
+    {% elif item is sequence and item|length >= 1 %}
+      {% set r = item[0] %}
+      {% set score = item[1] if item|length > 1 else none %}
+    {% else %}
+      {% set r = {} %}
+      {% set score = none %}
+    {% endif %}
+
+    <tr class="border-t align-top">
+      <td class="py-2 font-medium whitespace-nowrap">{{ r.host or 'unknown' }}</td>
+
+      <td class="whitespace-nowrap">
+        {% if r.mem_used_pct is not none %}
+          {{ '%.1f'|format(r.mem_used_pct) }}
+        {% else %}
+          –
+        {% endif %}
+      </td>
+
+      <td class="whitespace-nowrap">
+        {% if r.license_expired %}
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700">Expired</span>
+        {% else %}
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">OK</span>
+        {% endif %}
+      </td>
+
+      <td class="whitespace-nowrap">{{ r.iface_total if r.iface_total is not none else '–' }}</td>
+      <td class="whitespace-nowrap">{{ r.iface_enabled if r.iface_enabled is not none else '–' }}</td>
+      <td class="whitespace-nowrap">
+        {% if r.iface_enabled_ratio is not none %}
+          {{ '%.2f'|format(r.iface_enabled_ratio) }}
+        {% else %}
+          –
+        {% endif %}
+      </td>
+
+      <td>
+        <ul class="list-disc ml-4 space-y-0.5">
+        {% for s in actions.get(r.host, []) %}
+          <li>{{ s }}</li>
+        {% endfor %}
+        </ul>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>

@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+
+  <!-- INVENTORY -->
+  <section class="xl:col-span-2 bg-white p-5 rounded-2xl shadow">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="font-semibold text-slate-800">Inventory</h2>
+      <div class="text-xs text-slate-500">
+        {{ rows|length }} file{{ '' if rows|length == 1 else 's' }} loaded
+      </div>
+    </div>
+
+    {% if rows %}
+
+    {# Decide which optional columns to show by scanning rows #}
+    {% set ns = namespace(
+      show_mem=false, show_license=false, show_bgp=false, show_v4=false, show_v6=false, show_uptime=false, show_health=false
+    ) %}
+    {% for r in rows %}
+      {% if r.get('mem_used_pct') is not none %}{% set ns.show_mem = true %}{% endif %}
+      {% if r.get('license_status') is not none %}{% set ns.show_license = true %}{% endif %}
+      {% if r.get('bgp_peers') is not none %}{% set ns.show_bgp = true %}{% endif %}
+      {% if r.get('v4nets') is not none %}{% set ns.show_v4 = true %}{% endif %}
+      {% if r.get('v6nets') is not none %}{% set ns.show_v6 = true %}{% endif %}
+      {% if r.get('uptime_days') is not none or r.get('uptime_hours') is not none %}{% set ns.show_uptime = true %}{% endif %}
+      {# Health column if any HC field exists #}
+      {% if r.get('cpu_1m') is not none or r.get('cpu_5m') is not none or r.get('cpu_threshold') is not none
+            or r.get('mem_threshold') is not none
+            or r.get('env_temp') is not none or r.get('env_temp_threshold') is not none
+            or r.get('uptime_minutes') is not none or r.get('uptime_min_required') is not none %}
+        {% set ns.show_health = true %}
+      {% endif %}
+    {% endfor %}
+
+    <div class="overflow-x-auto rounded-lg ring-1 ring-slate-200">
+      <table class="min-w-full text-sm divide-y divide-slate-200">
+        <thead class="bg-slate-50 text-slate-600">
+          <tr>
+            <th class="py-2 px-3 text-left font-medium">Host</th>
+            {% if ns.show_mem %}<th class="px-3 text-left font-medium">mem_used%</th>{% endif %}
+            {% if ns.show_license %}<th class="px-3 text-left font-medium">License</th>{% endif %}
+            {% if ns.show_health %}<th class="px-3 text-left font-medium">Health</th>{% endif %}
+            <th class="px-3 text-left font-medium">Version</th>
+            <th class="px-3 text-left font-medium">iface_total</th>
+            <th class="px-3 text-left font-medium">enabled</th>
+            <th class="px-3 text-left font-medium">ratio</th>
+            {% if ns.show_bgp %}<th class="px-3 text-left font-medium">BGP peers</th>{% endif %}
+            {% if ns.show_v4 %}<th class="px-3 text-left font-medium">v4 nets</th>{% endif %}
+            {% if ns.show_v6 %}<th class="px-3 text-left font-medium">v6 nets</th>{% endif %}
+            {% if ns.show_uptime %}<th class="px-3 text-left font-medium">uptime</th>{% endif %}
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+        {% for r in rows %}
+          <tr class="odd:bg-white even:bg-slate-50/40">
+            <!-- Host link to details -->
+            <td class="py-2 px-3 font-medium">
+              <a href="/report?host={{ r.get('host') }}" class="text-blue-600 hover:text-blue-700 underline-offset-2 hover:underline">
+                {{ r.get('host') }}
+              </a>
+            </td>
+
+            {% if ns.show_mem %}
+              <td class="px-3">
+                {% if r.get('mem_used_pct') is not none %}
+                  <div class="w-28">
+                    <div class="h-2 rounded bg-slate-200">
+                      <div class="h-2 rounded
+                                  {% if r.get('mem_used_pct') >= 85 %}bg-rose-500
+                                  {% elif r.get('mem_used_pct') >= 70 %}bg-amber-500
+                                  {% else %}bg-emerald-500{% endif %}"
+                           style="width: {{ [r.get('mem_used_pct'), 100]|min|round(0, 'floor') }}%"></div>
+                    </div>
+                    <div class="mt-1 text-[11px] text-slate-600">
+                      {{ '%.1f'|format(r.get('mem_used_pct')) }}%
+                    </div>
+                  </div>
+                {% else %}–{% endif %}
+              </td>
+            {% endif %}
+
+            {% if ns.show_license %}
+              <td class="px-3">
+                {% if r.get('license_status') is not none %}
+                  {% if r.get('license_expired') %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700">Expired</span>
+                  {% else %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">OK</span>
+                  {% endif %}
+                {% else %}–{% endif %}
+              </td>
+            {% endif %}
+
+            {% if ns.show_health %}
+              <td class="px-3">
+                <div class="flex flex-wrap items-center gap-1">
+                  {# CPU badge (uses cpu_1m or cpu_5m vs cpu_threshold) #}
+                  {% set cpu1 = r.get('cpu_1m') if r.get('cpu_1m') is not none else (r.get('cpu_5m') if r.get('cpu_5m') is not none else none) %}
+                  {% set cthr = r.get('cpu_threshold') %}
+                  {% if cpu1 is not none and cthr is not none %}
+                    {% set cpu_ok = cpu1 < cthr %}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[11px] font-medium
+                                 {{ 'bg-emerald-100 text-emerald-700' if cpu_ok else 'bg-rose-100 text-rose-700' }}"
+                          title="CPU {{ cpu1 }} / {{ cthr }}">
+                      CPU
+                    </span>
+                  {% endif %}
+
+                  {# MEM badge (uses mem_used_pct vs mem_threshold) #}
+                  {% set memu = r.get('mem_used_pct') %}
+                  {% set mthr = r.get('mem_threshold') %}
+                  {% if memu is not none and mthr is not none %}
+                    {% set mem_ok = memu < mthr %}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[11px] font-medium
+                                 {{ 'bg-emerald-100 text-emerald-700' if mem_ok else 'bg-rose-100 text-rose-700' }}"
+                          title="MEM {{ memu|round(0,'floor') }}% / {{ mthr }}%">
+                      MEM
+                    </span>
+                  {% endif %}
+
+                  {# ENV badge (uses env_temp vs env_temp_threshold) #}
+                  {% set envt = r.get('env_temp') %}
+                  {% set envthr = r.get('env_temp_threshold') %}
+                  {% if envt is not none and envthr is not none %}
+                    {% set env_ok = envt < envthr %}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[11px] font-medium
+                                 {{ 'bg-emerald-100 text-emerald-700' if env_ok else 'bg-rose-100 text-rose-700' }}"
+                          title="TEMP {{ envt }}° / {{ envthr }}°">
+                      ENV
+                    </span>
+                  {% endif %}
+
+                  {# UPTIME badge (uses uptime_minutes vs uptime_min_required) #}
+                  {% set upmin = r.get('uptime_minutes') %}
+                  {% set upthr = r.get('uptime_min_required') %}
+                  {% if upmin is not none and upthr is not none %}
+                    {% set up_ok = upmin >= upthr %}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[11px] font-medium
+                                 {{ 'bg-emerald-100 text-emerald-700' if up_ok else 'bg-rose-100 text-rose-700' }}"
+                          title="UP {{ upmin|int }}m / min {{ upthr|int }}m">
+                      UP
+                    </span>
+                  {% endif %}
+                </div>
+              </td>
+            {% endif %}
+
+            <td class="px-3">
+              {% if r.get('version_major') is not none %}
+                {{ r.get('version_major') }}.{{ r.get('version_minor') or 0 }}.{{ r.get('version_patch') or 0 }}
+              {% else %}
+                {{ r.get('version') or '–' }}
+              {% endif %}
+            </td>
+
+            <td class="px-3">{{ r.get('iface_total') }}</td>
+            <td class="px-3">{{ r.get('iface_enabled') }}</td>
+            <td class="px-3">
+              {% if r.get('iface_enabled_ratio') is not none %}
+                {{ '%.2f'|format(r.get('iface_enabled_ratio')) }}
+              {% else %}–{% endif %}
+            </td>
+
+            {% if ns.show_bgp %}<td class="px-3">{{ r.get('bgp_peers') if r.get('bgp_peers') is not none else '–' }}</td>{% endif %}
+            {% if ns.show_v4 %}<td class="px-3">{{ r.get('v4nets') if r.get('v4nets') is not none else '–' }}</td>{% endif %}
+            {% if ns.show_v6 %}<td class="px-3">{{ r.get('v6nets') if r.get('v6nets') is not none else '–' }}</td>{% endif %}
+            {% if ns.show_uptime %}
+              <td class="px-3 whitespace-nowrap">
+                {% set up = r|fmt_uptime %}
+                {% if up != '–' %}
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700">
+                    {{ up }}
+                  </span>
+                {% else %}
+                  –
+                {% endif %}
+              </td>
+            {% endif %}
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <p class="text-slate-600">No uploads yet. Load samples or upload your own JSON files.</p>
+    {% endif %}
+  </section>
+
+  <!-- ACTIONS -->
+  <section class="bg-white p-5 rounded-2xl shadow space-y-3">
+    <h2 class="font-semibold text-slate-800">Actions</h2>
+
+    <!-- Upload -->
+    <form action="/upload" method="post" enctype="multipart/form-data"
+          class="flex flex-wrap items-center gap-2">
+      <input type="file" name="files" multiple
+             class="text-sm w-full sm:flex-1 min-w-0
+                    file:mr-3 file:py-1 file:px-3 file:rounded file:border-0
+                    file:bg-slate-100 file:text-slate-800 hover:file:bg-slate-200"
+             required />
+      <button class="px-3 py-2 rounded bg-slate-800 text-white text-sm shadow
+                     hover:bg-slate-900 shrink-0">
+        Upload
+      </button>
+    </form>
+
+    <!-- Samples + View uploads -->
+    <div class="flex items-center gap-3">
+      <form action="/load-samples" method="post">
+        <button class="px-3 py-1 rounded bg-slate-200 text-slate-800 text-sm hover:bg-slate-300">Load sample reports</button>
+      </form>
+      <a href="/reports" class="px-3 py-1 rounded ring-1 ring-slate-200 text-slate-800 text-sm hover:bg-slate-50 inline-flex items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 opacity-70" viewBox="0 0 24 24" fill="currentColor"><path d="M10.414 5H20a2 2 0 0 1 2 2v1H2V6a2 2 0 0 1 2-2h4l2.414 1Z"/><path d="M22 9H2v7a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9Z"/></svg>
+        View uploads
+      </a>
+    </div>
+
+    <div class="pt-2 border-t border-slate-200"></div>
+
+    <!-- Scan config -->
+    <form action="/scan" method="post" class="space-y-2">
+      <div class="text-sm">
+        <label class="block mb-1 font-medium">Detector</label>
+        <select name="algo" id="algo" class="border rounded px-2 py-1 w-full">
+          <option value="iforest">IsolationForest (ML)</option>
+          <option value="iqr">IQR (no-ML)</option>
+        </select>
+      </div>
+
+      <div class="text-sm mt-2" id="iqr-k-row">
+        <label class="block mb-1 font-medium">IQR sensitivity (k)</label>
+        <input type="number" name="k" id="iqr-k"
+               step="0.1" min="0.1" max="5" value="1.5"
+               class="border rounded px-2 py-1 w-full" />
+        <p class="text-xs text-slate-500 mt-1">Lower k ⇒ more sensitive (flags more anomalies).</p>
+      </div>
+
+      <div class="text-sm mt-2" id="iforest-cont-row">
+        <label class="block mb-1 font-medium">Contamination (if using IsolationForest)</label>
+        <input type="number" name="contamination" step="0.01" min="0.01" max="0.50" value="0.10"
+               class="border rounded px-2 py-1 w-full" />
+        <p class="text-xs text-slate-500 mt-1">
+          Fraction of expected anomalies (0.01–0.50). Ignored for IQR.
+        </p>
+      </div>
+
+      <button class="w-full px-3 py-2 rounded bg-blue-600 text-white text-sm shadow hover:bg-blue-700">
+        Scan for anomalies
+      </button>
+    </form>
+
+    <form action="/execute" method="post">
+      <button class="w-full px-3 py-2 rounded bg-emerald-600 text-white text-sm shadow hover:bg-emerald-700">Execute plan (simulated)</button>
+    </form>
+  </section>
+
+  {# Optional pretty Healthchecks grid; uncomment if you added templates/health_grid.html #}
+  {# {% include "health_grid.html" %} #}
+  {% include "health_grid.html" %}
+
+  <!-- LATEST ANOMALIES -->
+  <section class="xl:col-span-3 bg-white p-5 rounded-2xl shadow">
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="font-semibold text-slate-800">Latest Anomalies</h2>
+    </div>
+
+    {% if anomalies and anomalies|length > 0 %}
+      {% include "anomalies_table.html" %}
+    {% else %}
+      <p class="text-slate-600 text-sm">No anomalies detected.</p>
+    {% endif %}
+  </section>
+</div>
+
+<script>
+  // Show/hide k vs contamination based on detector
+  (function () {
+    const algoSel = document.getElementById('algo');
+    const iqrRow = document.getElementById('iqr-k-row');
+    const ifRow = document.getElementById('iforest-cont-row');
+    function sync() {
+      if (algoSel.value === 'iqr') {
+        iqrRow.style.display = '';
+        ifRow.style.display = 'none';
+      } else {
+        iqrRow.style.display = 'none';
+        ifRow.style.display = '';
+      }
+    }
+    algoSel.addEventListener('change', sync);
+    sync(); // initial
+  })();
+</script>
+{% endblock %}

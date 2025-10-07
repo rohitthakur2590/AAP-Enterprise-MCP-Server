@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="bg-white p-4 rounded-2xl shadow">
+  <h2 class="font-semibold mb-3">Uploaded Reports</h2>
+  {% if items and items|length > 0 %}
+  <table class="min-w-full text-sm">
+    <thead class="text-left text-slate-500">
+      <tr>
+        <th class="py-2">Host</th>
+        <th>File</th>
+        <th>Size</th>
+        <th>Modified</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for it in items %}
+      <tr class="border-t">
+        <td class="py-2 font-medium">
+          <a href="/report?host={{ it.host }}" class="text-blue-600 underline hover:no-underline">
+            {{ it.host }}
+          </a>
+        </td>
+        <td>{{ it.filename }}</td>
+        <td>{{ (it.size / 1024)|round(1) }} KB</td>
+        <td>{{ it.mtime_human }}</td>
+        <td>
+          <a href="/report?filename={{ it.filename }}" class="text-blue-600 underline">View</a>
+          &nbsp;|&nbsp;
+          <a href="/download/{{ it.filename }}" class="text-blue-600 underline">Download</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="text-slate-600">No JSON files found in uploads.</p>
+  {% endif %}
+
+  <div class="mt-4">
+    <a href="/" class="text-blue-600 underline text-sm">← Back</a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="max-w-6xl mx-auto space-y-6">
+  <div class="flex items-center justify-between">
+    <h1 class="text-xl font-semibold text-slate-800">
+      Host report — {{ meta.host if meta else 'Unknown' }}
+    </h1>
+    <div class="flex items-center gap-2">
+      <a href="/" class="text-sm px-3 py-1 rounded ring-1 ring-slate-200 hover:bg-slate-50">← Back</a>
+      {% if meta and meta.filename %}
+        <a href="/download/{{ meta.filename }}"
+           class="text-sm px-3 py-1 rounded bg-slate-800 text-white hover:bg-slate-900">
+          Download JSON
+        </a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if error %}
+    <div class="bg-rose-50 text-rose-700 px-4 py-3 rounded">{{ error }}</div>
+  {% else %}
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left: Summary + Health -->
+    <section class="lg:col-span-2 space-y-4">
+      <!-- Healthchecks row -->
+      <div class="bg-white rounded-2xl shadow p-4">
+        <h2 class="font-medium text-slate-800 mb-3">Healthchecks</h2>
+
+        {% set r = row or {} %}
+        <div class="flex flex-wrap items-center gap-2">
+
+          {# CPU chip — prefers 1m, falls back to 5m; use safe dict access #}
+          {% set cpu1 = r.get('cpu_1m') %}
+          {% set cpu5 = r.get('cpu_5m') %}
+          {% set cthr = r.get('cpu_threshold') %}
+          {% if cpu1 is not none or cpu5 is not none or cthr is not none %}
+            {% set cpu_val = cpu1 if cpu1 is not none else cpu5 %}
+            {% set cpu_ok = (cpu_val is not none and cthr is not none and cpu_val < cthr) %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                         {{ 'bg-emerald-100 text-emerald-700' if cpu_ok else 'bg-rose-100 text-rose-700' }}"
+                  title="CPU {{ cpu_val if cpu_val is not none else '—' }} / thr {{ cthr if cthr is not none else '—' }}">
+              CPU
+            </span>
+          {% endif %}
+
+          {# Memory chip — mem_used_pct vs mem_threshold #}
+          {% set mem = r.get('mem_used_pct') %}
+          {% set mthr = r.get('mem_threshold') %}
+          {% if mem is not none or mthr is not none %}
+            {% set mem_ok = (mem is not none and mthr is not none and mem < mthr) %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                         {{ 'bg-emerald-100 text-emerald-700' if mem_ok else 'bg-rose-100 text-rose-700' }}"
+                  title="MEM used {{ mem if mem is not none else '—' }}% / thr {{ mthr if mthr is not none else '—' }}%">
+              MEM
+            </span>
+          {% endif %}
+
+          {# Environment chip — env_temp vs env_temp_threshold; env_over>0 -> red #}
+          {% set env_temp = r.get('env_temp') %}
+          {% set env_thr  = r.get('env_temp_threshold') %}
+          {% set env_over = r.get('env_over') %}
+          {% if env_temp is not none or env_thr is not none or env_over is not none %}
+            {% set env_ok = (env_over is none or env_over|float <= 0) and
+                            (env_temp is none or env_thr is none or env_temp < env_thr) %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                         {{ 'bg-emerald-100 text-emerald-700' if env_ok else 'bg-rose-100 text-rose-700' }}"
+                  title="ENV temp {{ env_temp if env_temp is not none else '—' }}°C / thr {{ env_thr if env_thr is not none else '—' }}°C">
+              ENV
+            </span>
+          {% endif %}
+
+          {# Uptime chip — uptime_minutes vs uptime_min_required #}
+          {% set up_m  = r.get('uptime_minutes') %}
+          {% set up_req = r.get('uptime_min_required') %}
+          {% if up_m is not none or up_req is not none %}
+            {% set up_ok = (up_m is not none and up_req is not none and up_m >= up_req) %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                         {{ 'bg-emerald-100 text-emerald-700' if up_ok else 'bg-rose-100 text-rose-700' }}"
+                  title="UP {{ up_m if up_m is not none else '—' }}m / min {{ up_req if up_req is not none else '—' }}m">
+              UP
+            </span>
+          {% endif %}
+
+          {# Roll-up pass/fail if provided #}
+          {% if r.get('hc_result') is not none %}
+            {% set all_ok = (r.get('hc_result')|string).upper() == 'PASS' %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                         {{ 'bg-emerald-100 text-emerald-700' if all_ok else 'bg-rose-100 text-rose-700' }}"
+                  title="Overall: {{ r.get('hc_result') }}">
+              HC
+            </span>
+          {% endif %}
+
+          {% if (cpu1 is none and cpu5 is none and cthr is none and
+                  mem is none and mthr is none and
+                  env_temp is none and env_thr is none and env_over is none and
+                  up_m is none and up_req is none and
+                  r.get('hc_result') is none) %}
+            <span class="text-sm text-slate-500">No healthcheck data for this host.</span>
+          {% endif %}
+
+        </div>
+      </div>
+
+      <!-- Facts / quick summary -->
+      <div class="bg-white rounded-2xl shadow p-4">
+        <h2 class="font-medium text-slate-800 mb-3">Facts</h2>
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-y-2 text-sm">
+          <div class="text-slate-500">Version</div>
+          <div class="md:col-span-2">
+            {% if (r.get('version_major') is not none) %}
+              {{ r.get('version_major') }}.{{ r.get('version_minor') or 0 }}.{{ r.get('version_patch') or 0 }}
+            {% else %}
+              {{ r.get('version') or '–' }}
+            {% endif %}
+          </div>
+
+          <div class="text-slate-500">Interfaces</div>
+          <div class="md:col-span-2">
+            {{ r.get('iface_enabled') if r.get('iface_enabled') is not none else '–' }}/{{ r.get('iface_total') if r.get('iface_total') is not none else '–' }}
+            (ratio {{ '%.2f'|format(r.get('iface_enabled_ratio')) if r.get('iface_enabled_ratio') is not none else '–' }})
+          </div>
+
+          <div class="text-slate-500">BGP peers</div>
+          <div class="md:col-span-2">{{ r.get('bgp_peers') if r.get('bgp_peers') is not none else '–' }}</div>
+
+          <div class="text-slate-500">Memory used</div>
+          <div class="md:col-span-2">
+            {% if r.get('mem_used_pct') is not none %}{{ '%.1f'|format(r.get('mem_used_pct')) }}%{% else %}–{% endif %}
+          </div>
+
+          <div class="text-slate-500">Uptime</div>
+          <div class="md:col-span-2">
+            {% set human = r|fmt_uptime %}
+            {{ human if human != '–' else '–' }}
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right: Raw JSON -->
+    <section class="bg-white rounded-2xl shadow p-4">
+      <h2 class="font-medium text-slate-800 mb-3">Raw report</h2>
+      <pre class="text-xs bg-slate-900 text-slate-100 rounded p-3 overflow-x-auto whitespace-pre">{{ pretty }}</pre>
+    </section>
+  </div>
+
+  {% endif %}
+</div>
+
+{% endblock %}
