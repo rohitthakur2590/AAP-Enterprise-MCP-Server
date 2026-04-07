@@ -1,80 +1,168 @@
-<table class="w-full min-w-[900px] table-fixed text-sm">
-  <colgroup>
-    <col class="w-32">   {# host #}
-    <col class="w-24">   {# mem_used% #}
-    <col class="w-20">   {# license #}
-    <col class="w-20">   {# iface_total #}
-    <col class="w-20">   {# enabled #}
-    <col class="w-20">   {# ratio #}
-    <col>                {# suggested (flex) #}
-  </colgroup>
+<div class="overflow-x-auto">
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="text-left text-xs text-slate-400 uppercase tracking-wide border-b border-slate-100">
+        <th class="py-2.5 pr-4 font-medium whitespace-nowrap">Host</th>
+        <th class="pr-4 font-medium whitespace-nowrap">Memory</th>
+        <th class="pr-4 font-medium whitespace-nowrap">CPU</th>
+        <th class="pr-4 font-medium whitespace-nowrap">License</th>
+        <th class="pr-4 font-medium whitespace-nowrap">Interfaces</th>
+        <th class="pr-4 font-medium whitespace-nowrap">BGP</th>
+        <th class="pr-4 font-medium whitespace-nowrap">Uptime</th>
+        <th class="pr-4 font-medium whitespace-nowrap">Score</th>
+        <th class="font-medium">AI Findings</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-100">
+    {% for item in anomalies %}
 
-  <thead class="text-left text-slate-500">
-    <tr>
-      <th class="py-2 whitespace-nowrap">Host</th>
-      <th class="whitespace-nowrap">mem_used%</th>
-      <th class="whitespace-nowrap">License</th>
-      <th class="whitespace-nowrap">iface_total</th>
-      <th class="whitespace-nowrap">enabled</th>
-      <th class="whitespace-nowrap">ratio</th>
-      <th class="whitespace-nowrap">suggested</th>
-    </tr>
-  </thead>
+      {# Support both shapes: plain row OR (row, score) pair #}
+      {% if item is mapping %}
+        {% set r = item %}
+        {% set score = r.get('_iforest_score') %}
+      {% elif item is sequence and item|length >= 1 %}
+        {% set r = item[0] %}
+        {% set score = item[1] if item|length > 1 else r.get('_iforest_score') %}
+      {% else %}
+        {% set r = {} %}
+        {% set score = none %}
+      {% endif %}
 
-  <tbody>
-  {% for item in anomalies %}
-    {# Support both shapes:
-       - item is a row (mapping)
-       - item is (row, score) pair
-    #}
-    {% if item is mapping %}
-      {% set r = item %}
-      {% set score = none %}
-    {% elif item is sequence and item|length >= 1 %}
-      {% set r = item[0] %}
-      {% set score = item[1] if item|length > 1 else none %}
-    {% else %}
-      {% set r = {} %}
-      {% set score = none %}
-    {% endif %}
+      {# Severity: critical if hc_result=FAIL or hc_fail_count>0, else warning #}
+      {% set is_critical = (r.get('hc_result') == 'FAIL') or (r.get('hc_fail_count') and r.get('hc_fail_count') > 0) %}
 
-    <tr class="border-t align-top">
-      <td class="py-2 font-medium whitespace-nowrap">{{ r.host or 'unknown' }}</td>
+      <tr class="{{ 'bg-rose-50/50 hover:bg-rose-50' if is_critical else 'bg-amber-50/30 hover:bg-amber-50/60' }} transition-colors align-top">
 
-      <td class="whitespace-nowrap">
-        {% if r.mem_used_pct is not none %}
-          {{ '%.1f'|format(r.mem_used_pct) }}
-        {% else %}
-          –
-        {% endif %}
-      </td>
+        <!-- Host -->
+        <td class="py-3 pr-4 whitespace-nowrap">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full shrink-0 {{ 'bg-rose-500' if is_critical else 'bg-amber-400' }}"></span>
+            <div>
+              <a href="/report?host={{ r.get('host', '') }}"
+                 class="font-semibold text-blue-600 hover:text-blue-800 hover:underline underline-offset-2 leading-none">
+                {{ r.get('host', 'unknown') }}
+              </a>
+              {% if r.get('os_type') %}
+                <div class="text-[10px] text-slate-400 mt-0.5 uppercase">{{ r.get('os_type') }}</div>
+              {% endif %}
+            </div>
+          </div>
+        </td>
 
-      <td class="whitespace-nowrap">
-        {% if r.license_expired %}
-          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700">Expired</span>
-        {% else %}
-          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">OK</span>
-        {% endif %}
-      </td>
+        <!-- Memory -->
+        <td class="pr-4 whitespace-nowrap">
+          {% set mem = r.get('mem_used_pct') or r.get('hc_mem_util') %}
+          {% if mem is not none %}
+            <span class="font-medium {{ 'text-rose-600' if mem >= 85 else ('text-amber-600' if mem >= 70 else 'text-slate-600') }}">
+              {{ '%.0f'|format(mem) }}%
+            </span>
+          {% else %}
+            <span class="text-slate-300">—</span>
+          {% endif %}
+        </td>
 
-      <td class="whitespace-nowrap">{{ r.iface_total if r.iface_total is not none else '–' }}</td>
-      <td class="whitespace-nowrap">{{ r.iface_enabled if r.iface_enabled is not none else '–' }}</td>
-      <td class="whitespace-nowrap">
-        {% if r.iface_enabled_ratio is not none %}
-          {{ '%.2f'|format(r.iface_enabled_ratio) }}
-        {% else %}
-          –
-        {% endif %}
-      </td>
+        <!-- CPU -->
+        <td class="pr-4 whitespace-nowrap">
+          {% set cpu = r.get('hc_cpu_1min') %}
+          {% set cthr = r.get('hc_cpu_threshold') %}
+          {% if cpu is not none %}
+            <span class="font-medium {{ 'text-rose-600' if (cthr is not none and cpu >= cthr) else ('text-amber-600' if cpu >= 70 else 'text-slate-600') }}">
+              {{ '%.0f'|format(cpu) }}%
+            </span>
+            {% if cthr is not none %}
+              <span class="text-slate-300 text-[11px]">/{{ cthr|int }}</span>
+            {% endif %}
+          {% else %}
+            <span class="text-slate-300">—</span>
+          {% endif %}
+        </td>
 
-      <td>
-        <ul class="list-disc ml-4 space-y-0.5">
-        {% for s in actions.get(r.host, []) %}
-          <li>{{ s }}</li>
-        {% endfor %}
-        </ul>
-      </td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
+        <!-- License -->
+        <td class="pr-4 whitespace-nowrap">
+          {% if r.get('license_expired') %}
+            <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[11px] font-medium bg-rose-100 text-rose-700">Expired</span>
+          {% elif r.get('license_status') %}
+            <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-700">Valid</span>
+          {% else %}
+            <span class="text-slate-300">—</span>
+          {% endif %}
+        </td>
+
+        <!-- Interfaces -->
+        <td class="pr-4 whitespace-nowrap">
+          {% set total = r.get('iface_total') %}
+          {% set enabled = r.get('iface_enabled') %}
+          {% set ratio = r.get('iface_enabled_ratio') %}
+          {% if total is not none %}
+            <span class="{{ 'text-rose-600 font-medium' if (ratio is not none and ratio < 0.5) else 'text-slate-600' }}">
+              {{ enabled }}/{{ total }}
+            </span>
+          {% else %}
+            <span class="text-slate-300">—</span>
+          {% endif %}
+        </td>
+
+        <!-- BGP -->
+        <td class="pr-4 whitespace-nowrap">
+          {% set bgp = r.get('bgp_peers') %}
+          {% if bgp is not none %}
+            <span class="{{ 'text-rose-600 font-semibold' if bgp == 0 else 'text-slate-600' }}">
+              {{ bgp }}{% if bgp == 0 %} ⚠{% endif %}
+            </span>
+          {% else %}
+            <span class="text-slate-300">—</span>
+          {% endif %}
+        </td>
+
+        <!-- Uptime -->
+        <td class="pr-4 whitespace-nowrap">
+          {% set upd = r.get('uptime_days') %}
+          {% set uph = r.get('uptime_hours') %}
+          {% if upd is not none %}
+            <span class="{{ 'text-amber-600 font-medium' if upd < 1 else 'text-slate-500 text-xs' }}">
+              {% if upd == 0 %}{{ uph or 0 }}h ↺{% else %}{{ upd }}d {% if uph %}{{ uph }}h{% endif %}{% endif %}
+            </span>
+          {% else %}
+            <span class="text-slate-300">—</span>
+          {% endif %}
+        </td>
+
+        <!-- Anomaly score -->
+        <td class="pr-4 whitespace-nowrap">
+          {% if score is not none %}
+            {% set score_pct = ((-score) * 100)|round(0)|int %}
+            {% set score_pct = [score_pct, 100]|min %}
+            <div class="flex items-center gap-1.5">
+              <div class="w-14 h-1.5 rounded-full bg-slate-200">
+                <div class="h-1.5 rounded-full {{ 'bg-rose-500' if score_pct > 55 else 'bg-amber-400' }}"
+                     style="width: {{ score_pct }}%"></div>
+              </div>
+              <span class="text-[11px] text-slate-500">{{ '%.2f'|format(score|abs) }}</span>
+            </div>
+          {% else %}
+            <span class="text-slate-300">—</span>
+          {% endif %}
+        </td>
+
+        <!-- AI Findings -->
+        <td class="py-3">
+          {% set findings = actions.get(r.get('host', ''), []) %}
+          {% if findings %}
+            <ul class="space-y-1">
+              {% for s in findings %}
+                <li class="flex items-start gap-1.5 text-xs text-slate-700 leading-snug">
+                  <span class="mt-0.5 w-1 h-1 rounded-full bg-slate-400 shrink-0"></span>
+                  {{ s }}
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <span class="text-xs text-slate-400 italic">No actions suggested</span>
+          {% endif %}
+        </td>
+
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>

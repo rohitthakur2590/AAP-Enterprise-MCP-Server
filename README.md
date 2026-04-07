@@ -1,508 +1,423 @@
-# AAP Enterprise MCP Server
+# Network Health AI — AAP Enterprise MCP Server
 
-A comprehensive Model Context Protocol (MCP) server suite for Red Hat's automation and infrastructure ecosystem, enabling AI assistants to interact with Ansible Automation Platform (AAP), Event-Driven Ansible (EDA), ansible-lint code quality tools, and Red Hat's official documentation with secure domain validation.
+An AI-powered network health monitoring and anomaly detection platform built on top of Red Hat Ansible Automation Platform (AAP), integrated with the **Model Context Protocol (MCP)**. Designed as a Nexus-ready demo that showcases how Claude can act as an intelligent orchestration layer over AAP infrastructure.
 
-## Features
+---
 
-### Ansible Automation Platform (AAP) Integration
-- **Inventory Management**: List, create, update inventories and manage hosts/groups
-- **Job Management**: Run job templates, monitor job status, and retrieve logs
-- **Project Management**: Create and manage SCM-based projects
-- **Template Management**: Create and manage job templates
-- **Host Operations**: Add/remove hosts, manage host variables and facts
-- **Ad-hoc Commands**: Execute ansible commands directly on inventory hosts
+## What This Is
 
-### Event-Driven Ansible (EDA) Integration
-- **Activation Management**: List, create, enable/disable EDA activations
-- **Rulebook Management**: Manage and query rulebooks
-- **Decision Environment Management**: Manage decision environments
-- **Event Stream Monitoring**: Monitor event streams
+This project demonstrates a **bidirectional MCP architecture** for AAP:
 
-### Ansible Galaxy Integration
-- **Collection Search**: Search and discover Ansible collections by name, namespace, or keywords
-- **Role Search**: Find community roles by keyword, author, or specific criteria
-- **Content Details**: Get comprehensive information about collections and roles including versions, dependencies, and installation instructions
-- **Smart Suggestions**: AI-powered content recommendations based on use case descriptions
-- **AAP Integration**: Intelligent suggestions that consider existing AAP infrastructure and inventories
+| Direction | Repo | What it does |
+|-----------|------|--------------|
+| **AAP → AI** | `ansible/aap-mcp-server` | Exposes AAP (Controller, EDA, Galaxy, Gateway) as MCP tools that Claude can call |
+| **AI → Ansible** | `ansible-collections/ansible.mcp` | Lets Ansible playbooks call Claude via `run_tool` module |
 
-### Ansible Lint Integration
-- **Playbook Validation**: Real-time linting of Ansible playbook content with configurable quality profiles
-- **File Analysis**: Comprehensive analysis of Ansible files, roles, and entire project structures
-- **Best Practice Enforcement**: Automated checking against Ansible community standards and best practices
-- **Syntax Validation**: Quick syntax checking for immediate feedback during development
-- **Multi-Profile Support**: Progressive quality improvement with profiles from basic to production-ready
-- **Rule Management**: List, filter, and understand ansible-lint rules with detailed explanations
+On top of this, `network_analytics.py` adds a **FastMCP analytics server** that performs AI-driven anomaly detection on network device telemetry — and exposes results via a live dashboard.
 
-### Red Hat Documentation Integration (Streamlined)
-- **Efficient Discovery**: Web search-based content discovery using official Red Hat domains
-- **Smart Content Fetching**: PDF-first strategy handling Red Hat's JavaScript rendering issues
-- **Domain Security**: Validates access to 50+ official Red Hat domains for secure documentation access
-- **Minimal MCP Overhead**: Streamlined 2-tool approach reduces API calls by 75%
-- **Search Query Generation**: Creates optimized search queries for external WebSearch MCP tool usage
-- **Authentication Handling**: Smart detection of subscription-required vs public content
+---
 
-## Installation
+## Demo: Network Health AI Dashboard
 
-### Prerequisites
-- Python 3.11 or higher
-- UV package manager (recommended) or pip
-- Access to an Ansible Automation Platform instance
-- Valid AAP API token
+The dashboard ingests network device inventory + healthcheck reports, runs **Isolation Forest** anomaly detection, and renders a real-time UI showing device health, anomalies, and AI findings.
 
-### Setup
+### Starting the Demo
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/sibilleb/AAP-Enterprise-MCP-Server.git
-   cd AAP-Enterprise-MCP-Server
-   ```
-
-2. **Install dependencies**:
-   ```bash
-   # Using UV (recommended)
-   uv sync
-   
-   # Or using pip
-   pip install -e .
-   ```
-
-3. **Set up environment variables**:
-   ```bash
-   # Required for AAP/EDA servers
-   export AAP_TOKEN="your-aap-api-token"
-   export AAP_URL="https://your-aap-server.com/api/controller/v2"
-   export EDA_TOKEN="your-eda-api-token"  # Can be same as AAP_TOKEN
-   export EDA_URL="https://your-aap-server.com/api/eda/v1"
-   
-   # Optional for Red Hat Customer Portal access
-   export REDHAT_USERNAME="your-redhat-username"
-   export REDHAT_PASSWORD="your-redhat-password"
-   ```
-
-## Getting Your API Token
-
-### Method 1: AAP Web Interface
-1. Log into your AAP web interface
-2. Click on your username in the top right corner
-3. Select "User Settings" or "My Profile"
-4. Navigate to the "Tokens" section
-5. Click "Add" or "Create Token"
-6. Set the scope to "Write" for full functionality
-7. Copy the generated token immediately (it won't be shown again)
-
-### Method 2: Command Line
 ```bash
-curl -k -X POST \
-  "https://your-aap-server.com/api/v2/tokens/" \
-  -H "Content-Type: application/json" \
-  -u "username:password" \
-  -d '{
-    "description": "MCP Server Token",
-    "application": null,
-    "scope": "write"
-  }'
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source ~/.zshrc
+
+# Install Python dependencies
+cd AAP-Enterprise-MCP-Server
+uv sync
+
+# Start the dashboard
+uv run uvicorn app:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-## Configuration
+Open **http://127.0.0.1:8000** in your browser.
 
-### MCP Client Configuration
+> **Quick start with sample data**: Copy files from `sample_reports/` into `uploads/` to pre-load 8 demo devices with 3 injected anomalies.
 
-Add the following to your MCP client configuration (e.g., Claude Desktop, Cursor):
+```bash
+cp sample_reports/* uploads/
+```
 
+### Full Demo Stack (4 services)
+
+Use the included orchestration script to run all services at once:
+
+```bash
+# From the network-mcp-tools/ root
+./demo-start.sh start     # Start all services
+./demo-start.sh stop      # Stop all services
+./demo-start.sh status    # Check service health
+./demo-start.sh logs      # Tail all logs
+```
+
+| Service | Port | Description |
+|---------|------|-------------|
+| Mock AAP Server | 8080 | Simulates AAP Controller + EDA APIs |
+| AAP MCP Server | 3000 | MCP-over-HTTP bridge for AAP tools |
+| Network Analytics MCP | 7778 | FastMCP stdio server for anomaly detection |
+| Network Health Dashboard | 8000 | FastAPI + Jinja2 live dashboard |
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│                    Nexus Workflow                    │
+│         (Ansible Orchestrator — like n8n)            │
+│   Each node = an MCP-powered Claude reasoning step  │
+└────────────────────┬────────────────────────────────┘
+                     │
+          ┌──────────▼──────────┐
+          │   Claude (AI Agent) │
+          └──┬──────────────┬───┘
+             │              │
+   ┌─────────▼──┐    ┌──────▼──────────────┐
+   │  AAP MCP   │    │  Network Analytics  │
+   │  Server    │    │  MCP Server         │
+   │ (:3000)    │    │  (network_analytics │
+   │            │    │   .py, stdio/7778)  │
+   └─────────┬──┘    └──────┬──────────────┘
+             │              │
+   ┌─────────▼──┐    ┌──────▼──────────┐
+   │  Mock AAP  │    │  FastAPI         │
+   │  Server    │    │  Dashboard       │
+   │  (:8080)   │    │  (:8000)         │
+   │ Controller │    │  Isolation Forest│
+   │ EDA        │    │  Anomaly Engine  │
+   └────────────┘    └─────────────────┘
+```
+
+### MCP Tools — Network Analytics
+
+| Tool | Description |
+|------|-------------|
+| `run_reports_controller` | Execute network data collection playbooks via AAP |
+| `detect_anomalies` | Run Isolation Forest + IQR on device telemetry |
+| `run_pipeline_local` | Full local pipeline: load → analyze → export |
+| `export_to_ui` | Push analysis results to the dashboard |
+| `start_ui` | Launch the dashboard server |
+| `stop_ui` | Stop the dashboard server |
+
+### MCP Tools — AAP Controller (via `aap-mcp-server`)
+
+| Tool | Description |
+|------|-------------|
+| `job_templates_list` | List available job templates |
+| `job_templates_launch_create` | Launch a job template |
+| `jobs_list` | List job executions |
+| `jobs_retrieve` | Get job details and status |
+| `jobs_stdout_retrieve` | Stream job output logs |
+| `inventories_list` | List AAP inventories |
+| `hosts_list` | List hosts within an inventory |
+| `eda.activations_list` | List EDA activations |
+
+---
+
+## Sample Data & Anomaly Detection
+
+The `sample_reports/` directory contains 16 files representing an 8-device network:
+
+| Device | OS | Role | Injected Anomaly |
+|--------|----|------|-----------------|
+| `iosxr-core-01` | IOS-XR | Core Router | — (healthy) |
+| `iosxr-core-02` | IOS-XR | Core Router | — (healthy) |
+| `iosxr-edge-01` | IOS-XR | Edge Router | ⚠ CPU 91.4% (threshold 80%) |
+| `iosxr-edge-02` | IOS-XR | Edge Router | — (healthy) |
+| `iosxr-pe-01` | IOS-XR | PE Router | ⚠ Uptime 0d (just rebooted) + Temp 68.4°C |
+| `iosxr-pe-02` | IOS-XR | PE Router | — (healthy) |
+| `nxos-agg-01` | NX-OS | Aggregation | ⚠ Mem 91.5% + 0 BGP peers |
+| `nxos-agg-02` | NX-OS | Aggregation | — (healthy) |
+
+Isolation Forest is trained on the full feature matrix (CPU, memory, temperature, uptime, BGP peer count, interface counts) and flags the 3 anomalous hosts automatically.
+
+### Report File Format
+
+Each device requires two files in `uploads/`:
+
+```
+{host}_inventory.json               # Device inventory (interfaces, BGP, etc.)
+{host}_{tag}_healthchecks.json      # Health metrics (CPU, mem, temp, uptime)
+```
+
+**Inventory JSON structure:**
 ```json
+{
+  "all_gathered_resources": {
+    "device_info": { "os_type": "iosxr", "model": "NCS-5501", "version": "7.9.2" },
+    "interfaces": [...],
+    "bgp_global": { "as_number": 65000, "router_id": "10.0.0.1" },
+    "bgp_address_family": [{ "afi": "ipv4", "neighbors": [...] }]
+  }
+}
+```
+
+**Healthcheck JSON structure:**
+```json
+{
+  "cpu_1min": 45.2,
+  "cpu_5min": 42.1,
+  "cpu_threshold": 80,
+  "mem_util": 67.3,
+  "mem_threshold": 85,
+  "env_temp": 42.0,
+  "env_temp_threshold": 65,
+  "uptime_min": 14400,
+  "uptime_min_threshold": 60,
+  "result": "PASS",
+  "fail_count": 0
+}
+```
+
+---
+
+## Nexus Integration
+
+[Nexus](https://github.com/ansible/nexus) is an Ansible-native workflow orchestrator (comparable to n8n) where each workflow node can be an MCP-powered Claude reasoning step.
+
+This demo is designed to slot directly into a Nexus workflow:
+
+```yaml
+# Example Nexus workflow node
+- name: detect_network_anomalies
+  mcp_tool: detect_anomalies
+  server: network_analytics
+  inputs:
+    report_dir: "{{ aap_job_output_path }}"
+  outputs:
+    anomalies: "{{ detected_anomalies }}"
+
+- name: trigger_remediation
+  mcp_tool: job_templates_launch_create
+  server: aap_controller
+  when: "{{ anomalies | length > 0 }}"
+  inputs:
+    template_id: "{{ remediation_template_id }}"
+    extra_vars:
+      affected_hosts: "{{ anomalies | map(attribute='host') | list }}"
+```
+
+### ansible.mcp Collection
+
+The `ansible-collections/ansible.mcp` collection lets Ansible playbooks call MCP tools directly:
+
+```yaml
+- name: Run anomaly detection via Claude MCP
+  ansible.mcp.run_tool:
+    server_url: "http://localhost:7778"
+    tool: detect_anomalies
+    arguments:
+      report_dir: /tmp/network_reports
+  connection: ansible.mcp.mcp
+  register: anomaly_results
+
+- name: Show detected anomalies
+  debug:
+    msg: "{{ anomaly_results.output }}"
+```
+
+---
+
+## Additional MCP Servers
+
+This repo also includes standalone MCP servers for other Red Hat ecosystem integrations:
+
+### Ansible Automation Platform (`ansible.py`)
+Full AAP Controller integration — inventory management, job execution, project management, ad-hoc commands, and Galaxy collection discovery.
+
+```bash
+# MCP client config (Claude Desktop / Cursor)
 {
   "mcpServers": {
     "ansible": {
       "command": "uv",
-      "args": [
-        "--directory",
-        "/path/to/AAP-Enterprise-MCP-Server",
-        "run",
-        "ansible.py"
-      ],
+      "args": ["--directory", "/path/to/AAP-Enterprise-MCP-Server", "run", "ansible.py"],
       "env": {
         "AAP_TOKEN": "your-aap-api-token",
         "AAP_URL": "https://your-aap-server.com/api/controller/v2"
-      }
-    },
-    "eda": {
-      "command": "uv",
-      "args": [
-        "--directory",
-        "/path/to/AAP-Enterprise-MCP-Server",
-        "run",
-        "eda.py"
-      ],
-      "env": {
-        "EDA_TOKEN": "your-eda-api-token",
-        "EDA_URL": "https://your-aap-server.com/api/eda/v1"
-      }
-    },
-    "ansible-lint": {
-      "command": "uv",
-      "args": [
-        "--directory",
-        "/path/to/AAP-Enterprise-MCP-Server",
-        "run",
-        "ansible-lint.py"
-      ]
-    },
-    "redhat-docs": {
-      "command": "uv",
-      "args": [
-        "--directory",
-        "/path/to/AAP-Enterprise-MCP-Server",
-        "run",
-        "redhat_docs.py"
-      ],
-      "env": {
-        "REDHAT_USERNAME": "your-username",
-        "REDHAT_PASSWORD": "your-password"
       }
     }
   }
 }
 ```
 
-### SSL/TLS Configuration
+### Event-Driven Ansible (`eda.py`)
+EDA activation management, rulebook queries, decision environment control, and event stream monitoring.
 
-For lab environments with self-signed certificates, the servers automatically:
-- Disable SSL warnings
-- Skip certificate verification
-- Handle insecure connections gracefully
+```bash
+{
+  "mcpServers": {
+    "eda": {
+      "command": "uv",
+      "args": ["--directory", "/path/to/AAP-Enterprise-MCP-Server", "run", "eda.py"],
+      "env": {
+        "EDA_TOKEN": "your-eda-api-token",
+        "EDA_URL": "https://your-aap-server.com/api/eda/v1"
+      }
+    }
+  }
+}
+```
 
-For production environments, ensure proper SSL certificates are configured on your AAP instance.
+### Ansible Lint (`ansible-lint.py`)
+Real-time playbook linting with progressive quality profiles (basic → moderate → production), syntax validation, and full project structure analysis.
 
-## Server Architecture
+### Red Hat Documentation (`redhat_docs.py`)
+Domain-validated access to 50+ official Red Hat documentation sites with PDF-first strategy, hybrid search, and telco/edge specialization.
 
-This project implements a **four-server MCP architecture** for comprehensive Red Hat ecosystem coverage:
+---
 
-| Server | File | Purpose | Key Features |
-|--------|------|---------|--------------|
-| **Ansible Automation Platform** | `ansible.py` | AAP integration with Galaxy search | Job management, inventory control, Galaxy discovery (855 lines) |
-| **Event-Driven Ansible** | `eda.py` | EDA integration | Activation management, rulebook handling (96 lines) |
-| **Ansible Lint** | `ansible-lint.py` | Code quality and best practices | Progressive quality profiles, project analysis (502 lines) |
-| **Red Hat Documentation** | `redhat_docs.py` | Official Red Hat documentation access | Domain validation, hybrid search, PDF access |
+## Installation
 
-### Combined Capabilities
-- **Complete Automation Lifecycle**: From documentation discovery to implementation with quality assurance
-- **Security**: Domain-validated access ensures only official Red Hat sources
-- **Intelligence**: AI-powered recommendations and specialized telco/edge guidance
-- **Scalability**: Independent servers allow focused functionality and scaling
+### Prerequisites
+- Python 3.11+
+- `uv` package manager ([install](https://docs.astral.sh/uv/getting-started/installation/))
+- Node.js 18+ (for `aap-mcp-server`)
 
-## Available Tools
+### Install uv
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source ~/.zshrc  # or ~/.bashrc
+```
 
-### Ansible Automation Platform Tools
+### Install Python dependencies
+```bash
+cd AAP-Enterprise-MCP-Server
+uv sync
+```
 
-| Tool | Description |
-|------|-------------|
-| `list_inventories` | List all inventories |
-| `get_inventory` | Get inventory details by ID |
-| `create_inventory` | Create a new inventory |
-| `list_hosts` | List hosts in an inventory |
-| `add_host_to_inventory` | Add a host to inventory |
-| `run_job` | Execute a job template |
-| `job_status` | Check job execution status |
-| `job_logs` | Retrieve job execution logs |
-| `list_job_templates` | List available job templates |
-| `create_job_template` | Create a new job template |
-| `create_project` | Create a new project |
-| `run_adhoc_command` | Execute ad-hoc ansible commands |
-| `list_projects` | List all projects |
-| `get_project` | Get project details by ID |
-| `list_project_updates` | List project update jobs (SCM sync) |
-| `get_project_update` | Get project update job status |
-| `get_project_update_logs` | Get project update job logs |
-| `update_project` | Trigger project update (SCM sync) |
+### Environment Variables (optional — only needed for live AAP)
+```bash
+export AAP_TOKEN="your-aap-api-token"
+export AAP_URL="https://your-aap-server.com/api/controller/v2"
+export EDA_TOKEN="your-eda-api-token"
+export EDA_URL="https://your-aap-server.com/api/eda/v1"
+```
 
-### Ansible Galaxy Search Tools
+> The demo works fully with the included mock AAP server — no live AAP instance required.
 
-| Tool | Description |
-|------|-------------|
-| `search_galaxy_collections` | Search Ansible Galaxy collections by query, tags, or namespace |
-| `search_galaxy_roles` | Search Ansible Galaxy roles by keyword, name, or author |
-| `get_collection_details` | Get detailed information about a specific collection |
-| `get_role_details` | Get detailed information about a specific role |
-| `suggest_ansible_content` | Intelligently suggest collections and roles based on use case description |
-
-### Ansible Lint Tools
-
-| Tool | Description |
-|------|-------------|
-| `lint_playbook` | Lint Ansible playbook content with configurable profiles and rules |
-| `lint_file` | Lint specific Ansible files on disk |
-| `lint_role` | Comprehensive validation of Ansible role directories |
-| `validate_syntax` | Quick syntax-only validation for immediate feedback |
-| `check_best_practices` | Context-aware best practice checking (dev/staging/production) |
-| `analyze_project` | Analyze entire Ansible project structure with comprehensive reporting |
-| `list_rules` | List available ansible-lint rules, optionally filtered by tags |
-| `list_tags` | List all available tags for ansible-lint rules |
-| `get_ansible_lint_version` | Get version information for installed ansible-lint |
-
-### Event-Driven Ansible Tools
-
-| Tool | Description |
-|------|-------------|
-| `list_activations` | List EDA activations |
-| `get_activation` | Get activation details |
-| `create_activation` | Create new activation |
-| `enable_activation` | Enable an activation |
-| `disable_activation` | Disable an activation |
-| `restart_activation` | Restart an activation |
-| `list_rulebooks` | List available rulebooks |
-| `get_rulebook` | Get rulebook details |
-| `list_decision_environments` | List decision environments |
-
-### Red Hat Documentation Tools
-
-| Tool | Description |
-|------|-------------|
-| `read_documentation` | Read Red Hat documentation with domain validation and PDF-first access |
-| `list_products` | List all available Red Hat products and versions |
-| `search_documentation` | Search Red Hat documentation with version prioritization |
-| `search_documentation_enhanced` | **NEW**: Hybrid search combining sitemap + web search discovery |
-| `search_with_web_guidance` | **NEW**: Get direct results + optimized Red Hat domain-restricted web search queries |
-| `smart_documentation_finder` | **NEW**: Intelligent multi-source documentation discovery |
-| `get_product_guides` | Get product guides with semantic version sorting (13 guides for OpenShift 4.18) |
-| `recommend_content` | Intelligent recommendations with telco/edge/CNF specialization |
+---
 
 ## Usage Examples
 
-### Running a Job Template
+### Detect Anomalies via MCP
 ```python
-# List available job templates
-templates = await list_job_templates()
-
-# Run a specific job template with variables
-result = await run_job(
-    template_id=5,
-    extra_vars={"target_env": "production", "app_version": "1.2.3"}
-)
-
-# Check job status
-status = await job_status(result["job"])
+# Claude calls this MCP tool during a Nexus workflow step
+result = await detect_anomalies(report_dir="uploads/")
+# Returns: list of anomalous hosts with scores and AI findings
 ```
 
-### Managing Inventory
+### Launch a Remediation Job via AAP
 ```python
-# List all inventories
-inventories = await list_inventories()
-
-# Add a new host to inventory
-await add_host_to_inventory(
-    inventory_id=1,
-    hostname="web-server-01.example.com",
-    variables={"ansible_host": "192.168.1.100", "role": "webserver"}
+# After anomalies are detected, Claude triggers a job template
+job = await job_templates_launch_create(
+    id=42,
+    extra_vars={
+        "target_hosts": ["iosxr-edge-01", "nxos-agg-01"],
+        "action": "cpu_throttle_check"
+    }
 )
 
-# Run ad-hoc command on inventory
-await run_adhoc_command(
-    inventory_id=1,
-    module_name="setup",
-    limit="web-server-01.example.com"
-)
+# Poll for completion
+status = await jobs_retrieve(id=job["job"])
+logs = await jobs_stdout_retrieve(id=job["job"])
 ```
 
 ### Galaxy Content Discovery
 ```python
-# Get intelligent suggestions for a specific use case
+# Find the right collection for your use case
 suggestions = await suggest_ansible_content(
-    use_case="I am developing a playbook that spins up and down EC2 servers on AWS using ansible",
-    check_aap_inventory=True
+    use_case="Configure BGP routing on Cisco IOS-XR devices"
 )
 
-# Search for AWS-related collections
-collections = await search_galaxy_collections(query="aws", limit=10)
-
-# Search for EC2-specific roles
-roles = await search_galaxy_roles(keyword="ec2", limit=5)
-
-# Get detailed information about a specific collection
-details = await get_collection_details(namespace="amazon", name="aws")
-
-# Get detailed information about a specific role
-role_info = await get_role_details(role_id=12345)
+# Get collection details
+details = await get_collection_details(namespace="cisco", name="iosxr")
 ```
 
-### Ansible Lint Quality Assurance
+### EDA Event-Driven Remediation
 ```python
-# Lint playbook content with different quality profiles
-playbook_content = """
----
-- hosts: all
-  tasks:
-    - name: install package
-      yum: name=nginx state=present
-"""
-
-# Basic linting for development
-basic_results = await lint_playbook(
-    content=playbook_content,
-    profile="basic",
-    format_type="json"
-)
-
-# Production-ready validation
-production_results = await lint_playbook(
-    content=playbook_content,
-    profile="production",
-    format_type="json"
-)
-
-# Quick syntax validation
-syntax_check = await validate_syntax(content=playbook_content)
-
-# Context-aware best practices checking
-best_practices = await check_best_practices(
-    content=playbook_content,
-    context="production"
-)
-
-# Analyze entire project structure
-project_analysis = await analyze_project(
-    project_path="/path/to/ansible/project",
-    profile="moderate"
-)
-
-# List available rules and tags
-rules = await list_rules(tags="idempotency,syntax")
-tags = await list_tags()
-```
-
-### EDA Activation Management
-```python
-# List all activations
+# Check active EDA rulebook activations
 activations = await list_activations()
 
-# Enable a specific activation
-await enable_activation(activation_id=3)
-
-# Check activation details
-details = await get_activation(activation_id=3)
+# Enable network anomaly response activation
+await enable_activation(activation_id=5)
 ```
 
-### Red Hat Documentation Access
-```python
-# Access OpenShift documentation with PDF preference
-content = await read_documentation(
-    "https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/updating_clusters/index",
-    format_preference="pdf"  # Ensures reliable content extraction
-)
+---
 
-# Search for telco edge content with hybrid approach
-guidance = await search_with_web_guidance(
-    "openshift telco edge cluster upgrade", 
-    product="openshift_container_platform"
-)
-# Returns direct results + 5 Red Hat domain-restricted web search queries
+## Dashboard UI
 
-# Get comprehensive telco/edge recommendations
-recommendations = await recommend_content(
-    "telco edge CNF cluster upgrade", 
-    role="administrator"
-)
-# Returns specialized edge computing and cluster update recommendations
+The dashboard at `http://127.0.0.1:8000` includes:
 
-# Get latest OpenShift guides (auto-detects 4.18, not 3.x)
-guides = await get_product_guides("openshift_container_platform", version="latest")
-# Returns 13 specialized guides including Updating Clusters, Edge Computing, etc.
+- **Status summary bar** — Total hosts, Healthy, Anomalies, Critical counts
+- **Device table** — OS type, Memory %, CPU, Interfaces, BGP peers, Uptime with live status dots
+- **Anomaly section** — Amber-highlighted rows with Isolation Forest score bars and AI findings
+- **Health grid** — Per-device PASS/FAIL cards with threshold markers on progress bars
+- **Upload panel** — Drop new report files to trigger live re-analysis
 
-# Domain-validated web search workflow
-guidance = await search_with_web_guidance("kubernetes edge computing")
-# Use generated queries like: "site:docs.redhat.com openshift 4.18 kubernetes edge computing"
-# Then feed discovered URLs back:
-content = await read_documentation(discovered_url, format_preference="pdf")
-```
-
-## Development
-
-### Running Tests
-```bash
-# Install development dependencies
-uv sync --group dev
-
-# Run tests
-pytest
-
-# Run with coverage
-pytest --cov=.
-```
-
-### Code Formatting
-```bash
-# Format code
-black .
-
-# Lint code
-ruff check .
-
-# Type checking
-mypy .
-```
+---
 
 ## Troubleshooting
 
-### Common Issues
+**Dashboard shows no data**
+Make sure report files are in `uploads/` with the correct naming pattern: `{host}_{tag}_healthchecks.json` (e.g., `iosxr-edge-01_network_healthchecks.json`). The `_network_` tag segment is required.
 
-1. **SSL Certificate Errors**: The server handles self-signed certificates automatically. If you encounter SSL issues, verify your AAP server configuration.
+**`uv` command not found**
+Run: `curl -LsSf https://astral.sh/uv/install.sh | sh && source ~/.zshrc`
 
-2. **Authentication Failures**: Ensure your API token has sufficient permissions (Write scope recommended).
+**SSL errors connecting to AAP**
+The server auto-disables SSL verification for lab environments with self-signed certificates.
 
-3. **Connection Timeouts**: Check network connectivity to your AAP server and verify the URL format.
+**MCP client not picking up tools**
+Restart your MCP client (Claude Desktop / Cursor) after any config changes.
 
-4. **Tool Not Found**: Restart your MCP client after configuration changes.
+---
 
-### Debug Mode
+## Project Structure
 
-Set environment variable for verbose logging:
-```bash
-export MCP_DEBUG=1
+```
+AAP-Enterprise-MCP-Server/
+├── app.py                    # FastAPI dashboard server
+├── network_analytics.py      # FastMCP analytics MCP server
+├── ansible.py                # AAP Controller MCP server
+├── eda.py                    # Event-Driven Ansible MCP server
+├── ansible-lint.py           # Ansible Lint MCP server
+├── redhat_docs.py            # Red Hat Documentation MCP server
+├── agent/
+│   ├── loader.py             # Report parser (inventory + healthchecks)
+│   └── detector.py           # Isolation Forest + IQR anomaly detection
+├── templates/
+│   ├── base.html             # Shared layout (dark navbar, Ansible branding)
+│   ├── index.html            # Main dashboard (summary cards + device table)
+│   ├── anomalies_table.html  # Anomaly detail view with AI scores
+│   └── health_grid.html      # Per-device health card grid
+├── sample_reports/           # 8-device mock dataset (16 files)
+├── uploads/                  # Active report directory (dashboard reads from here)
+└── pyproject.toml            # uv/pip dependency manifest
 ```
 
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass
-6. Submit a pull request
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Key Achievements
-
-### 🎯 **Red Hat Documentation Success Metrics**
-- ✅ **Version Detection**: OpenShift 4.18 correctly identified as latest (not 3.x)
-- ✅ **PDF Access**: 1.4MB+ PDF files successfully accessible  
-- ✅ **Search Relevance**: Telco edge queries return specialized documentation
-- ✅ **Domain Security**: 100% Red Hat domain validation (50+ domains tested)
-- ✅ **Web Search Integration**: Hybrid approach with official source restriction
-
-### 📊 **Performance Improvements**
-| Metric | Before | After | Status |
-|--------|--------|-------|--------|
-| Latest Version Detection | ❌ 3.x versions | ✅ 4.18+ versions | **Fixed** |
-| PDF Access Success Rate | ❌ 301/404 errors | ✅ 200 OK responses | **100%** |
-| Domain Validation | ❌ No filtering | ✅ 50+ official domains | **Secured** |
-| Available OpenShift Guides | 8 generic | 13 specialized | **+62%** |
-
-## Support
-
-- **Repository**: [AAP Enterprise MCP Server](https://github.com/sibilleb/AAP-Enterprise-MCP-Server)
-- **Issues**: [GitHub Issues](https://github.com/sibilleb/AAP-Enterprise-MCP-Server/issues)
-- **Documentation**: [README](README.md) | [Red Hat Docs README](README_REDHAT_DOCS.md)
-- **Ansible Community**: [Ansible Community Forum](https://forum.ansible.com/)
+---
 
 ## Related Projects
 
-- [Ansible Automation Platform](https://www.redhat.com/en/technologies/management/ansible)
-- [Event-Driven Ansible](https://www.redhat.com/en/technologies/management/ansible/event-driven-ansible)
-- [OpenShift Container Platform](https://www.redhat.com/en/technologies/cloud-computing/openshift)
-- [Red Hat Enterprise Linux](https://www.redhat.com/en/technologies/linux-platforms/enterprise-linux)
-- [Model Context Protocol](https://modelcontextprotocol.io/)
-- [FastMCP](https://github.com/punkpeye/fastmcp)
+- [ansible/aap-mcp-server](https://github.com/ansible/aap-mcp-server) — AAP as an MCP server (TypeScript, mock AAP included)
+- [ansible-collections/ansible.mcp](https://github.com/ansible-collections/ansible.mcp) — Ansible as an MCP client (collection)
+- [Nexus](https://github.com/ansible/nexus) — Ansible-native workflow orchestrator
+- [Model Context Protocol](https://modelcontextprotocol.io/) — Open standard for AI tool integration
+- [FastMCP](https://github.com/punkpeye/fastmcp) — Python MCP server framework
 
-**Ready for production use with secure, domain-validated Red Hat ecosystem access! 🚀**
+---
+
+## License
+
+MIT License — see [LICENSE](LICENSE) for details.
+
+---
+
+*Built for the Nexus Integration Demo — AI-powered network operations via Ansible + MCP* 🚀

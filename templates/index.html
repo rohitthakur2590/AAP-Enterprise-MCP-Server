@@ -1,78 +1,153 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
 
-  <!-- INVENTORY -->
-  <section class="xl:col-span-2 bg-white p-5 rounded-2xl shadow">
-    <div class="flex items-center justify-between mb-3">
-      <h2 class="font-semibold text-slate-800">Inventory</h2>
-      <div class="text-xs text-slate-500">
-        {{ rows|length }} file{{ '' if rows|length == 1 else 's' }} loaded
-      </div>
+{# ── Compute summary counts ── #}
+{% set n_total    = rows | length %}
+{% set n_anomaly  = anomalies | length %}
+{% set n_healthy  = n_total - n_anomaly %}
+{% set ns_crit    = namespace(count=0) %}
+{% for a in anomalies %}
+  {% if a is mapping %}
+    {% if a.get('hc_result') == 'FAIL' or (a.get('hc_fail_count') and a.get('hc_fail_count') > 0) %}
+      {% set ns_crit.count = ns_crit.count + 1 %}
+    {% endif %}
+  {% endif %}
+{% endfor %}
+{% set n_critical = ns_crit.count %}
+
+{# ── Status summary bar ── #}
+{% if rows %}
+<div class="mb-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+
+  <div class="bg-white rounded-xl px-4 py-3 shadow-sm ring-1 ring-slate-200 flex items-center gap-3">
+    <div class="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+      <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+    </div>
+    <div>
+      <div class="text-2xl font-bold text-slate-800 leading-none">{{ n_total }}</div>
+      <div class="text-xs text-slate-500 mt-0.5">Total Hosts</div>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-xl px-4 py-3 shadow-sm ring-1 ring-slate-200 flex items-center gap-3">
+    <div class="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
+      <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+    </div>
+    <div>
+      <div class="text-2xl font-bold text-emerald-700 leading-none">{{ n_healthy }}</div>
+      <div class="text-xs text-slate-500 mt-0.5">Healthy</div>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-xl px-4 py-3 shadow-sm ring-1 ring-{{ 'amber' if n_anomaly > 0 else 'slate' }}-200 flex items-center gap-3">
+    <div class="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
+      <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+    </div>
+    <div>
+      <div class="text-2xl font-bold text-amber-600 leading-none">{{ n_anomaly }}</div>
+      <div class="text-xs text-slate-500 mt-0.5">Anomalies</div>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-xl px-4 py-3 shadow-sm ring-1 ring-{{ 'rose' if n_critical > 0 else 'slate' }}-200 flex items-center gap-3">
+    <div class="w-9 h-9 rounded-lg bg-rose-50 flex items-center justify-center shrink-0">
+      <svg class="w-5 h-5 text-rose-500" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+    </div>
+    <div>
+      <div class="text-2xl font-bold text-rose-600 leading-none">{{ n_critical }}</div>
+      <div class="text-xs text-slate-500 mt-0.5">Critical</div>
+    </div>
+  </div>
+
+</div>
+{% endif %}
+
+{# ── Main grid ── #}
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-5">
+
+  <!-- ── INVENTORY TABLE ── -->
+  <section class="xl:col-span-2 bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="font-semibold text-slate-800 flex items-center gap-2">
+        <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
+        Inventory
+      </h2>
+      <span class="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+        {{ rows|length }} host{{ '' if rows|length == 1 else 's' }}
+      </span>
     </div>
 
     {% if rows %}
 
     {# Decide which optional columns to show by scanning rows #}
     {% set ns = namespace(
-      show_mem=false, show_license=false, show_bgp=false, show_v4=false, show_v6=false, show_uptime=false, show_health=false
+      show_mem=false, show_license=false, show_bgp=false, show_uptime=false, show_hc=false
     ) %}
     {% for r in rows %}
       {% if r.get('mem_used_pct') is not none %}{% set ns.show_mem = true %}{% endif %}
       {% if r.get('license_status') is not none %}{% set ns.show_license = true %}{% endif %}
       {% if r.get('bgp_peers') is not none %}{% set ns.show_bgp = true %}{% endif %}
-      {% if r.get('v4nets') is not none %}{% set ns.show_v4 = true %}{% endif %}
-      {% if r.get('v6nets') is not none %}{% set ns.show_v6 = true %}{% endif %}
       {% if r.get('uptime_days') is not none or r.get('uptime_hours') is not none %}{% set ns.show_uptime = true %}{% endif %}
-      {# Health column if any HC field exists #}
-      {% if r.get('cpu_1m') is not none or r.get('cpu_5m') is not none or r.get('cpu_threshold') is not none
-            or r.get('mem_threshold') is not none
-            or r.get('env_temp') is not none or r.get('env_temp_threshold') is not none
-            or r.get('uptime_minutes') is not none or r.get('uptime_min_required') is not none %}
-        {% set ns.show_health = true %}
+      {% if r.get('hc_result') is not none or r.get('hc_cpu_1min') is not none or r.get('hc_mem_util') is not none %}
+        {% set ns.show_hc = true %}
+      {% endif %}
+    {% endfor %}
+
+    {# Build set of anomalous host names for row highlighting #}
+    {% set ns2 = namespace(anomaly_hosts=[]) %}
+    {% for a in anomalies %}
+      {% if a is mapping %}
+        {% set _ = ns2.anomaly_hosts.append(a.get('host')) %}
       {% endif %}
     {% endfor %}
 
     <div class="overflow-x-auto rounded-lg ring-1 ring-slate-200">
       <table class="min-w-full text-sm divide-y divide-slate-200">
-        <thead class="bg-slate-50 text-slate-600">
+        <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
           <tr>
-            <th class="py-2 px-3 text-left font-medium">Host</th>
-            {% if ns.show_mem %}<th class="px-3 text-left font-medium">mem_used%</th>{% endif %}
+            <th class="py-2.5 px-3 text-left font-medium">Host</th>
+            {% if ns.show_mem %}<th class="px-3 text-left font-medium">Memory</th>{% endif %}
             {% if ns.show_license %}<th class="px-3 text-left font-medium">License</th>{% endif %}
-            {% if ns.show_health %}<th class="px-3 text-left font-medium">Health</th>{% endif %}
+            {% if ns.show_hc %}<th class="px-3 text-left font-medium">Health</th>{% endif %}
             <th class="px-3 text-left font-medium">Version</th>
-            <th class="px-3 text-left font-medium">iface_total</th>
-            <th class="px-3 text-left font-medium">enabled</th>
-            <th class="px-3 text-left font-medium">ratio</th>
-            {% if ns.show_bgp %}<th class="px-3 text-left font-medium">BGP peers</th>{% endif %}
-            {% if ns.show_v4 %}<th class="px-3 text-left font-medium">v4 nets</th>{% endif %}
-            {% if ns.show_v6 %}<th class="px-3 text-left font-medium">v6 nets</th>{% endif %}
-            {% if ns.show_uptime %}<th class="px-3 text-left font-medium">uptime</th>{% endif %}
+            <th class="px-3 text-left font-medium">Interfaces</th>
+            <th class="px-3 text-left font-medium">Active</th>
+            <th class="px-3 text-left font-medium">Ratio</th>
+            {% if ns.show_bgp %}<th class="px-3 text-left font-medium">BGP Peers</th>{% endif %}
+            {% if ns.show_uptime %}<th class="px-3 text-left font-medium">Uptime</th>{% endif %}
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
         {% for r in rows %}
-          <tr class="odd:bg-white even:bg-slate-50/40">
-            <!-- Host link to details -->
-            <td class="py-2 px-3 font-medium">
-              <a href="/report?host={{ r.get('host') }}" class="text-blue-600 hover:text-blue-700 underline-offset-2 hover:underline">
-                {{ r.get('host') }}
-              </a>
+          {% set is_anomaly = r.get('host') in ns2.anomaly_hosts %}
+          <tr class="{{ 'bg-amber-50/60 hover:bg-amber-50' if is_anomaly else 'odd:bg-white even:bg-slate-50/30 hover:bg-slate-50' }} transition-colors">
+
+            <td class="py-2.5 px-3 font-medium whitespace-nowrap">
+              <div class="flex items-center gap-1.5">
+                {% if is_anomaly %}
+                  <span class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
+                {% else %}
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></span>
+                {% endif %}
+                <a href="/report?host={{ r.get('host') }}"
+                   class="text-blue-600 hover:text-blue-800 hover:underline underline-offset-2">
+                  {{ r.get('host') }}
+                </a>
+              </div>
             </td>
 
             {% if ns.show_mem %}
               <td class="px-3">
                 {% if r.get('mem_used_pct') is not none %}
                   <div class="w-28">
-                    <div class="h-2 rounded bg-slate-200">
-                      <div class="h-2 rounded
+                    <div class="h-1.5 rounded-full bg-slate-200">
+                      <div class="h-1.5 rounded-full bar-fill
                                   {% if r.get('mem_used_pct') >= 85 %}bg-rose-500
-                                  {% elif r.get('mem_used_pct') >= 70 %}bg-amber-500
+                                  {% elif r.get('mem_used_pct') >= 70 %}bg-amber-400
                                   {% else %}bg-emerald-500{% endif %}"
-                           style="width: {{ [r.get('mem_used_pct'), 100]|min|round(0, 'floor') }}%"></div>
+                           style="width: {{ [r.get('mem_used_pct'), 100]|min|round(0,'floor') }}%"></div>
                     </div>
-                    <div class="mt-1 text-[11px] text-slate-600">
+                    <div class="mt-1 text-[11px] text-slate-500">
                       {{ '%.1f'|format(r.get('mem_used_pct')) }}%
                     </div>
                   </div>
@@ -81,215 +156,231 @@
             {% endif %}
 
             {% if ns.show_license %}
-              <td class="px-3">
+              <td class="px-3 whitespace-nowrap">
                 {% if r.get('license_status') is not none %}
                   {% if r.get('license_expired') %}
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700">Expired</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-rose-100 text-rose-700">Expired</span>
                   {% else %}
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">OK</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-700">Valid</span>
                   {% endif %}
                 {% else %}–{% endif %}
               </td>
             {% endif %}
 
-            {% if ns.show_health %}
+            {% if ns.show_hc %}
               <td class="px-3">
-                <div class="flex flex-wrap items-center gap-1">
-                  {# CPU badge (uses cpu_1m or cpu_5m vs cpu_threshold) #}
-                  {% set cpu1 = r.get('cpu_1m') if r.get('cpu_1m') is not none else (r.get('cpu_5m') if r.get('cpu_5m') is not none else none) %}
-                  {% set cthr = r.get('cpu_threshold') %}
-                  {% if cpu1 is not none and cthr is not none %}
-                    {% set cpu_ok = cpu1 < cthr %}
-                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[11px] font-medium
-                                 {{ 'bg-emerald-100 text-emerald-700' if cpu_ok else 'bg-rose-100 text-rose-700' }}"
-                          title="CPU {{ cpu1 }} / {{ cthr }}">
-                      CPU
-                    </span>
+                {% set hc_res = r.get('hc_result') %}
+                {% if hc_res %}
+                  {% if hc_res == 'PASS' %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-700">PASS</span>
+                  {% else %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-100 text-rose-700">FAIL</span>
                   {% endif %}
-
-                  {# MEM badge (uses mem_used_pct vs mem_threshold) #}
-                  {% set memu = r.get('mem_used_pct') %}
-                  {% set mthr = r.get('mem_threshold') %}
-                  {% if memu is not none and mthr is not none %}
-                    {% set mem_ok = memu < mthr %}
-                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[11px] font-medium
-                                 {{ 'bg-emerald-100 text-emerald-700' if mem_ok else 'bg-rose-100 text-rose-700' }}"
-                          title="MEM {{ memu|round(0,'floor') }}% / {{ mthr }}%">
-                      MEM
-                    </span>
-                  {% endif %}
-
-                  {# ENV badge (uses env_temp vs env_temp_threshold) #}
-                  {% set envt = r.get('env_temp') %}
-                  {% set envthr = r.get('env_temp_threshold') %}
-                  {% if envt is not none and envthr is not none %}
-                    {% set env_ok = envt < envthr %}
-                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[11px] font-medium
-                                 {{ 'bg-emerald-100 text-emerald-700' if env_ok else 'bg-rose-100 text-rose-700' }}"
-                          title="TEMP {{ envt }}° / {{ envthr }}°">
-                      ENV
-                    </span>
-                  {% endif %}
-
-                  {# UPTIME badge (uses uptime_minutes vs uptime_min_required) #}
-                  {% set upmin = r.get('uptime_minutes') %}
-                  {% set upthr = r.get('uptime_min_required') %}
-                  {% if upmin is not none and upthr is not none %}
-                    {% set up_ok = upmin >= upthr %}
-                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[11px] font-medium
-                                 {{ 'bg-emerald-100 text-emerald-700' if up_ok else 'bg-rose-100 text-rose-700' }}"
-                          title="UP {{ upmin|int }}m / min {{ upthr|int }}m">
-                      UP
-                    </span>
-                  {% endif %}
-                </div>
+                {% else %}
+                  <span class="text-slate-300 text-xs">—</span>
+                {% endif %}
               </td>
             {% endif %}
 
-            <td class="px-3">
-              {% if r.get('version_major') is not none %}
-                {{ r.get('version_major') }}.{{ r.get('version_minor') or 0 }}.{{ r.get('version_patch') or 0 }}
-              {% else %}
-                {{ r.get('version') or '–' }}
-              {% endif %}
+            <td class="px-3 text-slate-600 whitespace-nowrap">
+              {{ r.get('version') or '–' }}
             </td>
 
-            <td class="px-3">{{ r.get('iface_total') }}</td>
-            <td class="px-3">{{ r.get('iface_enabled') }}</td>
-            <td class="px-3">
+            <td class="px-3 text-slate-600">{{ r.get('iface_total') if r.get('iface_total') is not none else '–' }}</td>
+            <td class="px-3 text-slate-600">{{ r.get('iface_enabled') if r.get('iface_enabled') is not none else '–' }}</td>
+            <td class="px-3 whitespace-nowrap">
               {% if r.get('iface_enabled_ratio') is not none %}
-                {{ '%.2f'|format(r.get('iface_enabled_ratio')) }}
+                {% set rat = r.get('iface_enabled_ratio') %}
+                <span class="text-{{ 'rose-600 font-medium' if rat < 0.5 else ('amber-600' if rat < 0.75 else 'slate-600') }}">
+                  {{ '%.2f'|format(rat) }}
+                </span>
               {% else %}–{% endif %}
             </td>
 
-            {% if ns.show_bgp %}<td class="px-3">{{ r.get('bgp_peers') if r.get('bgp_peers') is not none else '–' }}</td>{% endif %}
-            {% if ns.show_v4 %}<td class="px-3">{{ r.get('v4nets') if r.get('v4nets') is not none else '–' }}</td>{% endif %}
-            {% if ns.show_v6 %}<td class="px-3">{{ r.get('v6nets') if r.get('v6nets') is not none else '–' }}</td>{% endif %}
+            {% if ns.show_bgp %}
+              <td class="px-3 whitespace-nowrap">
+                {% if r.get('bgp_peers') is not none %}
+                  {% if r.get('bgp_peers') == 0 %}
+                    <span class="text-rose-600 font-medium">0 ⚠</span>
+                  {% else %}
+                    <span class="text-slate-600">{{ r.get('bgp_peers') }}</span>
+                  {% endif %}
+                {% else %}–{% endif %}
+              </td>
+            {% endif %}
+
             {% if ns.show_uptime %}
               <td class="px-3 whitespace-nowrap">
                 {% set up = r|fmt_uptime %}
                 {% if up != '–' %}
-                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700">
-                    {{ up }}
-                  </span>
-                {% else %}
-                  –
-                {% endif %}
+                  {% if r.get('uptime_days') is not none and r.get('uptime_days') < 1 %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 text-amber-700">{{ up }} ↺</span>
+                  {% else %}
+                    <span class="text-slate-500 text-xs">{{ up }}</span>
+                  {% endif %}
+                {% else %}–{% endif %}
               </td>
             {% endif %}
+
           </tr>
         {% endfor %}
         </tbody>
       </table>
     </div>
+
     {% else %}
-      <p class="text-slate-600">No uploads yet. Load samples or upload your own JSON files.</p>
+      <div class="text-center py-12 text-slate-400">
+        <svg class="w-10 h-10 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></svg>
+        <p class="text-sm">No uploads yet.</p>
+        <p class="text-xs mt-1">Load samples or upload JSON files using the panel →</p>
+      </div>
     {% endif %}
   </section>
 
-  <!-- ACTIONS -->
-  <section class="bg-white p-5 rounded-2xl shadow space-y-3">
-    <h2 class="font-semibold text-slate-800">Actions</h2>
+  <!-- ── CONTROLS PANEL ── -->
+  <section class="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 p-5 space-y-4">
+    <h2 class="font-semibold text-slate-800 flex items-center gap-2">
+      <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      Controls
+    </h2>
 
     <!-- Upload -->
-    <form action="/upload" method="post" enctype="multipart/form-data"
-          class="flex flex-wrap items-center gap-2">
-      <input type="file" name="files" multiple
-             class="text-sm w-full sm:flex-1 min-w-0
-                    file:mr-3 file:py-1 file:px-3 file:rounded file:border-0
-                    file:bg-slate-100 file:text-slate-800 hover:file:bg-slate-200"
-             required />
-      <button class="px-3 py-2 rounded bg-slate-800 text-white text-sm shadow
-                     hover:bg-slate-900 shrink-0">
-        Upload
-      </button>
-    </form>
-
-    <!-- Samples + View uploads -->
-    <div class="flex items-center gap-3">
-      <form action="/load-samples" method="post">
-        <button class="px-3 py-1 rounded bg-slate-200 text-slate-800 text-sm hover:bg-slate-300">Load sample reports</button>
+    <div>
+      <p class="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Ingest Data</p>
+      <form action="/upload" method="post" enctype="multipart/form-data" class="space-y-2">
+        <input type="file" name="files" multiple required
+               class="text-xs w-full file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0
+                      file:bg-slate-100 file:text-slate-700 file:text-xs hover:file:bg-slate-200" />
+        <button class="w-full px-3 py-2 rounded-lg bg-slate-800 text-white text-sm font-medium shadow-sm hover:bg-slate-900 transition-colors">
+          Upload Files
+        </button>
       </form>
-      <a href="/reports" class="px-3 py-1 rounded ring-1 ring-slate-200 text-slate-800 text-sm hover:bg-slate-50 inline-flex items-center gap-2">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 opacity-70" viewBox="0 0 24 24" fill="currentColor"><path d="M10.414 5H20a2 2 0 0 1 2 2v1H2V6a2 2 0 0 1 2-2h4l2.414 1Z"/><path d="M22 9H2v7a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9Z"/></svg>
-        View uploads
+    </div>
+
+    <div class="flex gap-2">
+      <form action="/load-samples" method="post" class="flex-1">
+        <button class="w-full px-2 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-medium hover:bg-slate-200 transition-colors">
+          Load Samples
+        </button>
+      </form>
+      <a href="/reports"
+         class="flex-1 px-2 py-1.5 rounded-lg ring-1 ring-slate-200 text-slate-700 text-xs font-medium hover:bg-slate-50 transition-colors text-center inline-flex items-center justify-center gap-1">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 opacity-60" viewBox="0 0 24 24" fill="currentColor"><path d="M10.414 5H20a2 2 0 0 1 2 2v1H2V6a2 2 0 0 1 2-2h4l2.414 1Z"/><path d="M22 9H2v7a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9Z"/></svg>
+        View Uploads
       </a>
     </div>
 
-    <div class="pt-2 border-t border-slate-200"></div>
+    <div class="border-t border-slate-100"></div>
 
     <!-- Scan config -->
-    <form action="/scan" method="post" class="space-y-2">
-      <div class="text-sm">
-        <label class="block mb-1 font-medium">Detector</label>
-        <select name="algo" id="algo" class="border rounded px-2 py-1 w-full">
-          <option value="iforest">IsolationForest (ML)</option>
-          <option value="iqr">IQR (no-ML)</option>
-        </select>
-      </div>
+    <div>
+      <p class="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Anomaly Detection</p>
+      <form action="/scan" method="post" class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Detector</label>
+          <select name="algo" id="algo"
+                  class="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            <option value="iforest">IsolationForest (ML)</option>
+            <option value="iqr">IQR (rule-based)</option>
+          </select>
+        </div>
 
-      <div class="text-sm mt-2" id="iqr-k-row">
-        <label class="block mb-1 font-medium">IQR sensitivity (k)</label>
-        <input type="number" name="k" id="iqr-k"
-               step="0.1" min="0.1" max="5" value="1.5"
-               class="border rounded px-2 py-1 w-full" />
-        <p class="text-xs text-slate-500 mt-1">Lower k ⇒ more sensitive (flags more anomalies).</p>
-      </div>
+        <div id="iqr-k-row" class="hidden">
+          <label class="block text-xs font-medium text-slate-600 mb-1">Sensitivity (k)</label>
+          <input type="number" name="k" id="iqr-k" step="0.1" min="0.1" max="5" value="1.5"
+                 class="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+          <p class="text-[11px] text-slate-400 mt-1">Lower k → more sensitive</p>
+        </div>
 
-      <div class="text-sm mt-2" id="iforest-cont-row">
-        <label class="block mb-1 font-medium">Contamination (if using IsolationForest)</label>
-        <input type="number" name="contamination" step="0.01" min="0.01" max="0.50" value="0.10"
-               class="border rounded px-2 py-1 w-full" />
-        <p class="text-xs text-slate-500 mt-1">
-          Fraction of expected anomalies (0.01–0.50). Ignored for IQR.
-        </p>
-      </div>
+        <div id="iforest-cont-row">
+          <label class="block text-xs font-medium text-slate-600 mb-1">Contamination</label>
+          <input type="number" name="contamination" step="0.01" min="0.01" max="0.50" value="0.20"
+                 class="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+          <p class="text-[11px] text-slate-400 mt-1">Expected anomaly fraction (0.01–0.50)</p>
+        </div>
 
-      <button class="w-full px-3 py-2 rounded bg-blue-600 text-white text-sm shadow hover:bg-blue-700">
-        Scan for anomalies
+        <button class="w-full px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium shadow-sm hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          Scan for Anomalies
+        </button>
+      </form>
+    </div>
+
+    <div class="border-t border-slate-100"></div>
+
+    <form action="/execute" method="post">
+      <button class="w-full px-3 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium shadow-sm hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Execute Plan (simulated)
       </button>
     </form>
 
-    <form action="/execute" method="post">
-      <button class="w-full px-3 py-2 rounded bg-emerald-600 text-white text-sm shadow hover:bg-emerald-700">Execute plan (simulated)</button>
-    </form>
-  </section>
-
-  {# Optional pretty Healthchecks grid; uncomment if you added templates/health_grid.html #}
-  {# {% include "health_grid.html" %} #}
-  {% include "health_grid.html" %}
-
-  <!-- LATEST ANOMALIES -->
-  <section class="xl:col-span-3 bg-white p-5 rounded-2xl shadow">
-    <div class="flex items-center justify-between mb-2">
-      <h2 class="font-semibold text-slate-800">Latest Anomalies</h2>
+    <!-- Feature tags -->
+    {% if features %}
+    <div class="pt-2">
+      <p class="text-[11px] text-slate-400 mb-1.5">ML features used in last scan</p>
+      <div class="flex flex-wrap gap-1">
+        {% for f in features %}
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600">{{ f }}</span>
+        {% endfor %}
+      </div>
     </div>
-
-    {% if anomalies and anomalies|length > 0 %}
-      {% include "anomalies_table.html" %}
-    {% else %}
-      <p class="text-slate-600 text-sm">No anomalies detected.</p>
     {% endif %}
   </section>
+
+  {# ── Healthchecks grid ── #}
+  {% include "health_grid.html" %}
+
+  <!-- ── ANOMALIES ── -->
+  <section class="xl:col-span-3 rounded-2xl shadow-sm ring-1 overflow-hidden
+                  {{ 'ring-amber-200 bg-amber-50/30' if anomalies else 'ring-slate-200 bg-white' }}">
+    <div class="px-5 py-4 flex items-center justify-between border-b
+                {{ 'border-amber-200 bg-amber-50' if anomalies else 'border-slate-100 bg-white' }}">
+      <h2 class="font-semibold text-slate-800 flex items-center gap-2">
+        {% if anomalies %}
+          <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+        {% endif %}
+        Anomaly Detection Results
+        {% if anomalies %}
+          <span class="ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-500 text-white">{{ anomalies|length }}</span>
+        {% endif %}
+      </h2>
+      {% if anomalies %}
+        <span class="text-xs text-amber-700 font-medium">IsolationForest · contamination=0.20</span>
+      {% endif %}
+    </div>
+
+    <div class="p-5 bg-white">
+      {% if anomalies and anomalies|length > 0 %}
+        {% include "anomalies_table.html" %}
+      {% else %}
+        <div class="text-center py-10 text-slate-400">
+          <svg class="w-10 h-10 mx-auto mb-3 text-emerald-400 opacity-70" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
+          <p class="text-sm font-medium text-slate-500">All hosts look healthy</p>
+          <p class="text-xs mt-1">No anomalies detected in the current dataset</p>
+        </div>
+      {% endif %}
+    </div>
+  </section>
+
 </div>
 
 <script>
-  // Show/hide k vs contamination based on detector
   (function () {
     const algoSel = document.getElementById('algo');
-    const iqrRow = document.getElementById('iqr-k-row');
-    const ifRow = document.getElementById('iforest-cont-row');
+    const iqrRow  = document.getElementById('iqr-k-row');
+    const ifRow   = document.getElementById('iforest-cont-row');
     function sync() {
       if (algoSel.value === 'iqr') {
-        iqrRow.style.display = '';
-        ifRow.style.display = 'none';
+        iqrRow.classList.remove('hidden');
+        ifRow.classList.add('hidden');
       } else {
-        iqrRow.style.display = 'none';
-        ifRow.style.display = '';
+        iqrRow.classList.add('hidden');
+        ifRow.classList.remove('hidden');
       }
     }
     algoSel.addEventListener('change', sync);
-    sync(); // initial
+    sync();
   })();
 </script>
 {% endblock %}

@@ -1,0 +1,39 @@
+{
+  "health_checks": {
+    "cpu_utilization": {
+      "1_min_avg": 29.4,
+      "5_min_avg": 26.8,
+      "threshold": 80,
+      "status": "PASS"
+    },
+    "memory_utilization": {
+      "current_utilization": 51.2,
+      "threshold": 85,
+      "status": "PASS"
+    },
+    "memory_free": {
+      "current_free": 12000,
+      "free_mb": 12000,
+      "status": "PASS"
+    },
+    "uptime": {
+      "current_uptime": 96600,
+      "min_uptime": 3600,
+      "status": "PASS"
+    },
+    "environment": {
+      "temperature": {
+        "current_temp": 39.2,
+        "threshold": 70,
+        "status": "PASS"
+      },
+      "fans": {
+        "status": "OK"
+      },
+      "power": {
+        "status": "OK"
+      }
+    },
+    "result": "PASS"
+  }
+}
