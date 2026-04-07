@@ -67,32 +67,79 @@ Use the included orchestration script to run all services at once:
 
 ## Architecture
 
+The platform is a full-stack, AI-in-the-loop network operations system. Data flows from physical network devices up through Ansible collection and analysis, into an MCP layer that Claude reasons over, and finally surfaces in a web dashboard or Nexus workflow.
+
 ```
-┌─────────────────────────────────────────────────────┐
-│                    Nexus Workflow                    │
-│         (Ansible Orchestrator — like n8n)            │
-│   Each node = an MCP-powered Claude reasoning step  │
-└────────────────────┬────────────────────────────────┘
-                     │
-          ┌──────────▼──────────┐
-          │   Claude (AI Agent) │
-          └──┬──────────────┬───┘
-             │              │
-   ┌─────────▼──┐    ┌──────▼──────────────┐
-   │  AAP MCP   │    │  Network Analytics  │
-   │  Server    │    │  MCP Server         │
-   │ (:3000)    │    │  (network_analytics │
-   │            │    │   .py, stdio/7778)  │
-   └─────────┬──┘    └──────┬──────────────┘
-             │              │
-   ┌─────────▼──┐    ┌──────▼──────────┐
-   │  Mock AAP  │    │  FastAPI         │
-   │  Server    │    │  Dashboard       │
-   │  (:8080)   │    │  (:8000)         │
-   │ Controller │    │  Isolation Forest│
-   │ EDA        │    │  Anomaly Engine  │
-   └────────────┘    └─────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                      Network Devices                         │
+│           IOS-XR · NX-OS · EOS · Junos · IOS-XE             │
+└──────────────────────────┬───────────────────────────────────┘
+                           │  telemetry, configs, health stats
+                           ▼
+┌──────────────────────────────────────────────────────────────┐
+│               Ansible Automation Platform (AAP)              │
+│  ┌───────────────┐  ┌───────────────┐  ┌─────────────────┐  │
+│  │ Backup / Col- │  │ Restore Role  │  │  Scoring Engine │  │
+│  │ lection Role  │  │               │  │  (health check) │  │
+│  └───────────────┘  └───────────────┘  └─────────────────┘  │
+│                                                              │
+│  Mock AAP (:8080) — Controller + EDA APIs (demo mode)       │
+└──────────────────────────┬───────────────────────────────────┘
+                           │  structured JSON reports
+                           ▼
+┌──────────────────────────────────────────────────────────────┐
+│                     MCP Server Layer                         │
+│                                                              │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │          AAP MCP Server  (:3000)                    │    │
+│  │  Tools: job_templates · jobs · inventories · hosts  │    │
+│  │         eda.activations · stdout · job_events        │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                                                              │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │       Network Analytics MCP  (stdio / :7778)        │    │
+│  │  Tools: detect_anomalies · run_pipeline_local       │    │
+│  │         export_to_ui · run_reports_controller       │    │
+│  │  Engine: Isolation Forest + IQR anomaly detection   │    │
+│  └─────────────────────────────────────────────────────┘    │
+└──────────────────────────┬───────────────────────────────────┘
+                           │  tool calls + results
+                           ▼
+┌──────────────────────────────────────────────────────────────┐
+│                  AI Assistant — Claude                       │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │  Natural Language Understanding · Reasoning           │  │
+│  │  Anomaly Interpretation · Remediation Recommendations │  │
+│  │  Tool Orchestration across AAP + Analytics MCP        │  │
+│  └───────────────────────────────────────────────────────┘  │
+│                                                              │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │            Nexus Workflow Orchestration               │  │
+│  │   Each node = one MCP-powered Claude reasoning step  │  │
+│  │   detect → analyse → remediate → verify → report     │  │
+│  └───────────────────────────────────────────────────────┘  │
+└──────────────────────────┬───────────────────────────────────┘
+                           │  findings + actions
+                           ▼
+┌──────────────────────────────────────────────────────────────┐
+│                      User Interface                          │
+│  ┌─────────────────┐  ┌──────────────────┐  ┌───────────┐  │
+│  │  Network Health │  │  Nexus Workflow   │  │   Chat /  │  │
+│  │  Dashboard      │  │  Canvas          │  │   Claude  │  │
+│  │  (:8000)        │  │                  │  │   Desktop │  │
+│  │  FastAPI+Jinja2 │  │                  │  │           │  │
+│  └─────────────────┘  └──────────────────┘  └───────────┘  │
+└──────────────────────────────────────────────────────────────┘
 ```
+
+### Demo Service Map
+
+| Service | Port | Role in Architecture |
+|---------|------|----------------------|
+| Mock AAP Server | 8080 | Stands in for a live AAP Controller + EDA during demo |
+| AAP MCP Server | 3000 | Translates Claude tool calls into AAP REST API requests |
+| Network Analytics MCP | 7778 | Runs anomaly detection; exposes results as MCP tools |
+| Network Health Dashboard | 8000 | Visualises device health, anomalies, and AI findings |
 
 ### MCP Tools — Network Analytics
 
