@@ -1,6 +1,6 @@
 # Network Health AI — AAP Enterprise MCP Server
 
-An AI-powered network health monitoring and anomaly detection platform built on top of Red Hat Ansible Automation Platform (AAP), integrated with the **Model Context Protocol (MCP)**. Designed as a Nexus-ready demo that showcases how Claude can act as an intelligent orchestration layer over AAP infrastructure.
+An AI-powered network health monitoring and anomaly detection platform built on top of Red Hat Ansible Automation Platform (AAP), integrated with the **Model Context Protocol (MCP)**. Designed to showcase how Claude can act as an intelligent orchestration layer over AAP infrastructure.
 
 ---
 
@@ -67,7 +67,7 @@ Use the included orchestration script to run all services at once:
 
 ## Architecture
 
-The platform is a full-stack, AI-in-the-loop network operations system. Data flows from physical network devices up through Ansible collection and analysis, into an MCP layer that Claude reasons over, and finally surfaces in a web dashboard or Nexus workflow.
+The platform is a full-stack, AI-in-the-loop network operations system. Data flows from physical network devices up through Ansible collection and analysis, into an MCP layer that Claude reasons over, and finally surfaces in a web dashboard or chat interface.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -112,20 +112,14 @@ The platform is a full-stack, AI-in-the-loop network operations system. Data flo
 │  │  Anomaly Interpretation · Remediation Recommendations │  │
 │  │  Tool Orchestration across AAP + Analytics MCP        │  │
 │  └───────────────────────────────────────────────────────┘  │
-│                                                              │
-│  ┌───────────────────────────────────────────────────────┐  │
-│  │            Nexus Workflow Orchestration               │  │
-│  │   Each node = one MCP-powered Claude reasoning step  │  │
-│  │   detect → analyse → remediate → verify → report     │  │
-│  └───────────────────────────────────────────────────────┘  │
 └──────────────────────────┬───────────────────────────────────┘
                            │  findings + actions
                            ▼
 ┌──────────────────────────────────────────────────────────────┐
 │                      User Interface                          │
 │  ┌─────────────────┐  ┌──────────────────┐  ┌───────────┐  │
-│  │  Network Health │  │  Nexus Workflow   │  │   Chat /  │  │
-│  │  Dashboard      │  │  Canvas          │  │   Claude  │  │
+│  │  Network Health │  │  Ansible          │  │   Chat /  │  │
+│  │  Dashboard      │  │  Workflow         │  │   Claude  │  │
 │  │  (:8000)        │  │                  │  │   Desktop │  │
 │  │  FastAPI+Jinja2 │  │                  │  │           │  │
 │  └─────────────────┘  └──────────────────┘  └───────────┘  │
@@ -224,14 +218,11 @@ Each device requires two files in `uploads/`:
 
 ---
 
-## Nexus Integration
+## Ansible Workflow Integration
 
-[Nexus](https://github.com/ansible/nexus) is an Ansible-native workflow orchestrator (comparable to n8n) where each workflow node can be an MCP-powered Claude reasoning step.
-
-This demo is designed to slot directly into a Nexus workflow:
+This demo is designed to integrate with Ansible-native workflow orchestration, where each workflow step can be an MCP-powered Claude reasoning action:
 
 ```yaml
-# Example Nexus workflow node
 - name: detect_network_anomalies
   mcp_tool: detect_anomalies
   server: network_analytics
@@ -355,7 +346,7 @@ export EDA_URL="https://your-aap-server.com/api/eda/v1"
 
 ### Detect Anomalies via MCP
 ```python
-# Claude calls this MCP tool during a Nexus workflow step
+# Claude calls the anomaly detection MCP tool
 result = await detect_anomalies(report_dir="uploads/")
 # Returns: list of anomalous hosts with scores and AI findings
 ```
@@ -455,7 +446,6 @@ AAP-Enterprise-MCP-Server/
 
 - [ansible/aap-mcp-server](https://github.com/ansible/aap-mcp-server) — AAP as an MCP server (TypeScript, mock AAP included)
 - [ansible-collections/ansible.mcp](https://github.com/ansible-collections/ansible.mcp) — Ansible as an MCP client (collection)
-- [Nexus](https://github.com/ansible/nexus) — Ansible-native workflow orchestrator
 - [Model Context Protocol](https://modelcontextprotocol.io/) — Open standard for AI tool integration
 - [FastMCP](https://github.com/punkpeye/fastmcp) — Python MCP server framework
 
@@ -467,4 +457,4 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
-*Built for the Nexus Integration Demo — AI-powered network operations via Ansible + MCP* 🚀
+*AI-powered network operations via Ansible + MCP* 🚀
